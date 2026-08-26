@@ -4,3 +4,5 @@ gunicorn>=22.0.0
 psycopg2-binary>=2.9.9
 reportlab>=4.0.0
 Pillow>=10.0.0
+pyotp>=2.9.0
+qrcode>=7.4.2

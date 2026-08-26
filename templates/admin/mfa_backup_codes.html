@@ -1,0 +1,23 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Backup Codes | {{ company.name }}{% endblock %}
+{% block page_title %}Your Backup Codes{% endblock %}
+{% block page_subtitle %}<p>Save these somewhere safe — this is the only time they'll be shown</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card" style="max-width:520px;">
+  <p style="color:var(--text-muted);">
+    If you ever lose access to your authenticator app, each of these codes
+    will get you back in once, in place of a 6-digit code. Write them down
+    or save them in a password manager — RGC Admin can't show them to you
+    again after you leave this page (regenerating gives you a new set and
+    invalidates these).
+  </p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:24px 0; font-family:monospace; font-size:1.05rem;">
+    {% for code in codes %}
+      <div style="background:var(--bg-alt); border-radius:8px; padding:10px 14px; text-align:center; letter-spacing:1px;">{{ code }}</div>
+    {% endfor %}
+  </div>
+  <a href="{{ url_for('admin_settings') }}" class="btn btn-primary">I've saved them &mdash; Done</a>
+</div>
+
+{% endblock %}

@@ -59,4 +59,43 @@
   </div>
 </div>
 
+<div class="admin-card" style="margin-top:20px;">
+  <h3 style="margin-top:0;">Two-Factor Authentication</h3>
+  <p style="color:var(--text-muted); margin-top:-8px;">
+    For your account only ({{ admin_username }}{{ ' — technical account' if not is_owner_account else '' }}).
+    {% if not is_owner_account %}The owner's login has its own, separate two-factor setup.{% endif %}
+  </p>
+
+  {% if mfa_enabled %}
+    <p style="color:var(--text-muted);">
+      <span class="badge badge-published">Enabled</span>
+      A verification code is required to log in here and in the RGC Manager app, on top of the password.
+    </p>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;">
+      <form method="post" action="{{ url_for('admin_settings_mfa_regenerate_backup_codes') }}" onsubmit="return confirm('This replaces your existing backup codes — the old ones will stop working. Continue?');">
+        <button type="submit" class="btn btn-small">Regenerate backup codes</button>
+      </form>
+    </div>
+
+    <form method="post" action="{{ url_for('admin_settings_mfa_disable') }}" style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);" onsubmit="return confirm('Turn off two-factor authentication? Only your password will be needed to log in after this.');">
+      <div>
+        <label for="mfa_disable_password">Confirm your password to turn this off</label>
+        <input type="password" id="mfa_disable_password" name="password" required autocomplete="current-password">
+      </div>
+      <div>
+        <button type="submit" class="btn btn-small btn-danger">Turn off two-factor authentication</button>
+      </div>
+    </form>
+  {% else %}
+    <p style="color:var(--text-muted);">
+      <span class="badge badge-draft">Not enabled</span>
+      Add a second step to the admin login (here and in the RGC Manager app) using an authenticator app like Google Authenticator, Authy, or 1Password.
+    </p>
+    <form method="post" action="{{ url_for('admin_settings_mfa_enable') }}" style="margin-top:16px;">
+      <button type="submit" class="btn btn-primary">Set up two-factor authentication</button>
+    </form>
+  {% endif %}
+</div>
+
 {% endblock %}

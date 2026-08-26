@@ -98,6 +98,7 @@ larger number if you'd like a longer window.
 | `SECRET_KEY` | Yes (prod) | Signs session cookies. Any long random string — set once, keep it constant (see "Staying logged in" above). |
 | `ADMIN_USERNAME` | Recommended | Username for `/admin/login`. Defaults to `admin`. |
 | `ADMIN_PASSWORD` | Yes (prod) | Password for `/admin/login`. Defaults to `changeme123` — the app prints a warning on startup if you haven't changed it. |
+| `CREATOR_USERNAME` / `CREATOR_PASSWORD` | Optional | A second, separate admin login (e.g. for whoever maintains the site) with access to Updates/Products/Pages/Settings but NOT Orders/Invoices/Mailbox/Pickups/Subscribers. Doesn't exist unless BOTH are set — leave both blank to skip it. Two-factor authentication (below) is independent per account. |
 | `DATABASE_URL` | Recommended | Postgres connection string, e.g. `postgresql://rgc:password@localhost:5432/rgc` for a self-hosted Postgres (see below), or whatever a managed provider gives you. Without it, falls back to local SQLite. |
 | `SMTP_USERNAME` | For contact-form emails | The mailbox's sign-in address. Defaults to `COMPANY["contact_email"]` in `app.py` (`info@rgcdoortodoorboxservices.ca`). |
 | `SMTP_PASSWORD` | For contact-form emails | That mailbox's sign-in password. |

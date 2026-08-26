@@ -1,5 +1,7 @@
 import csv
+import hashlib
 import io
+import json
 import os
 import secrets
 import smtplib
@@ -13,9 +15,11 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from email.message import EmailMessage
 from functools import wraps
 
+import pyotp
+import qrcode
 from flask import (
     Flask, render_template, request, redirect, url_for, flash, session,
-    abort, Response, jsonify,
+    abort, Response, jsonify, g,
 )
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, text
@@ -76,6 +80,89 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 # (including this 30-day one) is invalidated and everyone gets logged out.
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme123")
+
+# --- A second, restricted login for whoever maintains the site (developer/
+# technical support), separate from the owner's account above -------------
+# Unset by default (both env vars blank) — this login doesn't exist at all
+# until you set BOTH CREATOR_USERNAME and CREATOR_PASSWORD. There's no
+# insecure default like ADMIN_PASSWORD's "changeme123" here on purpose: a
+# second admin door should never be open unless someone deliberately opened
+# it.
+#
+# This account can do everything technical/content-related (Updates,
+# Products, Pages, Settings — including its own two-factor setup) but is
+# refused, both on the website and in the RGC Manager app, at anything
+# touching customers or money: Orders, Invoices, Mailbox, Pickups,
+# Subscribers. See owner_required/api_owner_required below and
+# ADMIN_SECTIONS' role_required field for exactly where that line is drawn.
+# If you ever want this account to see everything the owner does, just add
+# it to ADMIN_ROLES_FULL_ACCESS below instead of removing the check.
+CREATOR_USERNAME = os.environ.get("CREATOR_USERNAME", "")
+CREATOR_PASSWORD = os.environ.get("CREATOR_PASSWORD", "")
+
+
+def _match_admin_credentials(username, password):
+    """Checks `username`/`password` against both configured admin logins
+    and returns the identity string ("owner" or "creator") of whichever one
+    matched, or None if neither did. That identity is what everything else
+    in this file keys off of: session["admin_identity"] / the "id" claim in
+    the mobile token (see admin_login/api_login below), which account's MFA
+    Setting rows apply (see verify_mfa_code and friends), and which routes
+    are allowed (see owner_required/api_owner_required)."""
+    if secrets.compare_digest(username, ADMIN_USERNAME) and secrets.compare_digest(password, ADMIN_PASSWORD):
+        return "owner"
+    if (
+        CREATOR_USERNAME and CREATOR_PASSWORD
+        and secrets.compare_digest(username, CREATOR_USERNAME)
+        and secrets.compare_digest(password, CREATOR_PASSWORD)
+    ):
+        return "creator"
+    return None
+
+
+# Identities allowed past owner_required/api_owner_required, i.e. allowed to
+# touch Orders/Invoices/Mailbox/Pickups/Subscribers. Only "owner" by
+# default; add "creator" here if you'd rather that account have full access
+# instead of the technical-only slice described above.
+ADMIN_ROLES_FULL_ACCESS = {"owner"}
+
+# --- Two-factor authentication (TOTP), optional -----------------------------
+# Off by default — nothing changes for either account until it turns MFA on
+# from its own Admin > Site Settings. Once enabled for an account it's
+# required on BOTH the web login (/admin/login) and the mobile app login
+# (/api/v1/login) for that account specifically.
+#
+# State lives in the Setting key/value table (see the Setting model), not an
+# env var like ADMIN_PASSWORD, because it needs to be turned on/off — and the
+# secret regenerated — from the admin UI without a server restart or
+# redeploy. Every key below is namespaced by admin identity ("owner" or
+# "creator" — see _match_admin_credentials) so the two accounts each enroll
+# their own authenticator app and never see each other's codes:
+#   mfa_enabled:<identity>               "1" once enrollment is confirmed
+#                                         with a real code, unset otherwise
+#   mfa_totp_secret:<identity>           the ACTIVE base32 TOTP secret for
+#                                         that identity; only read by the
+#                                         login routes once ...enabled is "1"
+#   mfa_totp_secret_pending:<identity>   a freshly generated secret sitting
+#                                         in that account's Settings > 2FA
+#                                         setup, waiting to be confirmed with
+#                                         a code before it becomes
+#                                         ...totp_secret (see
+#                                         admin_settings_mfa_setup)
+#   mfa_backup_codes:<identity>          JSON list of {"hash": <sha256 hex>,
+#                                         "used": bool} — that identity's
+#                                         one-time recovery codes, shown once
+#                                         at enrollment (see
+#                                         generate_backup_codes)
+#
+# LOCKOUT RECOVERY: there's no "forgot your code" flow for either account.
+# If one of them loses their authenticator app AND their backup codes, the
+# only way back in is direct database access — connect to the DB (see
+# deploy/) and run, e.g. for the owner:
+#   UPDATE setting SET value = '0' WHERE key = 'mfa_enabled:owner';
+# (substitute 'mfa_enabled:creator' for the other account; or just delete
+# the row). That's the exact same trust model as forgetting ADMIN_PASSWORD
+# or CREATOR_PASSWORD, just one row over.
 
 # --- Mobile app API (companion Android manager app) -------------------------
 # The Android app doesn't use the browser session cookie above — it signs in
@@ -580,8 +667,17 @@ ADMIN_SECTIONS = [
     ("🛍️", "Products", "admin_products",
      {"admin_products", "admin_product_new", "admin_product_edit"}),
     ("📄", "Pages", "admin_pages", {"admin_pages", "admin_page_edit"}),
-    ("⚙️", "Settings", "admin_settings", {"admin_settings"}),
+    ("⚙️", "Settings", "admin_settings",
+     {"admin_settings", "admin_settings_mfa_setup", "admin_settings_mfa_backup_codes"}),
 ]
+
+# Sidebar sections hidden from the creator's technical-only account —
+# exactly the sections whose routes are behind @owner_required above
+# (Mailbox, Orders, Invoices, Pickups, Subscribers all touch customer or
+# financial data). Kept as a lookup by section label rather than a 5th
+# ADMIN_SECTIONS tuple field so _admin_base.html's plain 4-item unpacking
+# doesn't need to change.
+OWNER_ONLY_ADMIN_SECTIONS = {"Mailbox", "Orders", "Invoices", "Pickups", "Subscribers"}
 
 
 @app.context_processor
@@ -602,13 +698,24 @@ def inject_globals():
          if request.endpoint in endpoints),
         None,
     )
+    is_admin_logged_in = bool(session.get("is_admin"))
+    admin_identity = session.get("admin_identity", "owner")
+    is_owner_account = admin_identity in ADMIN_ROLES_FULL_ACCESS
+    visible_admin_sections = [
+        section for section in ADMIN_SECTIONS
+        if is_owner_account or section[1] not in OWNER_ONLY_ADMIN_SECTIONS
+    ]
     return {
         "company": company,
         "favicon_url": favicon_url,
         "cart_count": cart_count,
         "social_links": social_links,
-        "admin_username": ADMIN_USERNAME,
-        "admin_sections": ADMIN_SECTIONS,
+        "admin_username": (
+            _admin_display_username(admin_identity) if is_admin_logged_in else ADMIN_USERNAME
+        ),
+        "admin_identity": admin_identity if is_admin_logged_in else None,
+        "is_owner_account": is_owner_account,
+        "admin_sections": visible_admin_sections if is_admin_logged_in else ADMIN_SECTIONS,
         "admin_section": admin_section,
     }
 
@@ -1130,6 +1237,105 @@ def set_setting(key, value):
     db.session.commit()
 
 
+# --- Two-factor authentication (TOTP) helpers --------------------------------
+# See the big comment above ADMIN_USERNAME for how this state is stored in
+# Setting (namespaced per `identity` -- "owner" or "creator") and how to
+# recover a lockout. Every function here takes that `identity` explicitly
+# rather than assuming "the" admin, so the two accounts' MFA never overlap.
+
+def _mfa_setting_key(name, identity):
+    return f"{name}:{identity}"
+
+
+def mfa_is_enabled(identity):
+    return get_setting(_mfa_setting_key("mfa_enabled", identity)) == "1"
+
+
+def _totp_for_secret(secret):
+    return pyotp.TOTP(secret)
+
+
+def verify_totp_code(identity, code):
+    """Check a 6-digit authenticator code against `identity`'s ACTIVE
+    secret. False if that account's MFA isn't enabled, no secret is set, or
+    the code is missing/wrong. valid_window=1 allows the previous/next
+    30-second step too, so a slightly-off phone clock doesn't lock anyone
+    out."""
+    secret = get_setting(_mfa_setting_key("mfa_totp_secret", identity))
+    code = (code or "").strip().replace(" ", "")
+    if not secret or not code:
+        return False
+    try:
+        return _totp_for_secret(secret).verify(code, valid_window=1)
+    except Exception:
+        return False
+
+
+def _hash_backup_code(code):
+    # Salted with app.secret_key (same value the mobile token and session
+    # cookie are signed with — see the note above ADMIN_USERNAME about
+    # keeping SECRET_KEY stable across deploys). Backup codes are shown
+    # once, in plaintext, at enrollment; only this hash is ever stored.
+    # (Not per-identity -- the identity's whole set of codes already lives
+    # under that identity's own mfa_backup_codes:<identity> key, and a hash
+    # collision between the two accounts' codes would be meaningless since
+    # each is only ever checked against its own account's Setting row.)
+    normalized = (code or "").strip().upper().replace("-", "").replace(" ", "")
+    return hashlib.sha256((normalized + app.secret_key).encode("utf-8")).hexdigest()
+
+
+def generate_backup_codes(identity, count=8):
+    """Generate `count` fresh single-use recovery codes for `identity`,
+    store their hashes in Setting (replacing any previous set for that
+    identity only), and return the plaintext codes so the caller can show
+    them ONCE — there is no way to display them again later, only
+    regenerate a new set."""
+    codes = []
+    records = []
+    alphabet = string.ascii_uppercase + string.digits
+    for _ in range(count):
+        raw = "".join(secrets.choice(alphabet) for _ in range(8))
+        formatted = f"{raw[:4]}-{raw[4:]}"
+        codes.append(formatted)
+        records.append({"hash": _hash_backup_code(formatted), "used": False})
+    set_setting(_mfa_setting_key("mfa_backup_codes", identity), json.dumps(records))
+    return codes
+
+
+def consume_backup_code(identity, code):
+    """Check `code` against `identity`'s stored backup codes. If it matches
+    an unused one, marks it used (so it can't be replayed) and returns
+    True."""
+    code = (code or "").strip()
+    if not code:
+        return False
+    key = _mfa_setting_key("mfa_backup_codes", identity)
+    raw = get_setting(key)
+    if not raw:
+        return False
+    try:
+        records = json.loads(raw)
+    except (TypeError, ValueError):
+        return False
+    target_hash = _hash_backup_code(code)
+    matched = False
+    for record in records:
+        if not record.get("used") and record.get("hash") == target_hash:
+            record["used"] = True
+            matched = True
+            break
+    if matched:
+        set_setting(key, json.dumps(records))
+    return matched
+
+
+def verify_mfa_code(identity, code):
+    """Accepts either a live 6-digit authenticator code or an unused backup
+    code, both checked against `identity`'s own MFA state — used by both
+    the web login's second step and the mobile API login."""
+    return verify_totp_code(identity, code) or consume_backup_code(identity, code)
+
+
 def get_page_content(slug):
     page = PageContent.query.get(slug)
     return page.body if page else ""
@@ -1231,10 +1437,28 @@ def login_required(view):
     return wrapped
 
 
+def owner_required(view):
+    """Stack this UNDER @login_required (i.e. @login_required goes above
+    it, closer to @app.route) on any route that touches customers or
+    money: Orders, Invoices, Mailbox, Pickups, Subscribers. Blocks the
+    creator's technical-only account (see ADMIN_ROLES_FULL_ACCESS and the
+    comment above ADMIN_USERNAME) while leaving it logged in — this is a
+    "not for your account" redirect, not a "please log in" one."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if session.get("admin_identity", "owner") not in ADMIN_ROLES_FULL_ACCESS:
+            flash("Your account doesn't have access to that section.", "error")
+            return redirect(url_for("admin_dashboard"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
 def api_login_required(view):
     """Auth guard for the /api/v1/* mobile endpoints. Expects
     "Authorization: Bearer <token>" (a token minted by /api/v1/login), not
-    the browser session cookie the rest of the admin panel uses."""
+    the browser session cookie the rest of the admin panel uses. Stashes
+    the token's identity/username on flask.g for api_owner_required (and
+    api_me) to read."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
@@ -1242,11 +1466,29 @@ def api_login_required(view):
         if not token:
             return jsonify(error="Missing or malformed Authorization header."), 401
         try:
-            _mobile_token_serializer.loads(token, max_age=MOBILE_TOKEN_MAX_AGE_SECONDS)
+            payload = _mobile_token_serializer.loads(token, max_age=MOBILE_TOKEN_MAX_AGE_SECONDS)
         except SignatureExpired:
             return jsonify(error="Session expired. Please log in again."), 401
         except BadSignature:
             return jsonify(error="Invalid token."), 401
+        # "id" is missing on tokens minted before the creator account
+        # existed -- treat those as "owner" so anyone already signed in to
+        # the app when this ships isn't unexpectedly locked out of
+        # anything; they'll get an "id" claim on their next login.
+        g.admin_identity = payload.get("id") or "owner"
+        g.admin_username = payload.get("u")
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def api_owner_required(view):
+    """Stack this UNDER @api_login_required on the same
+    Orders/Invoices/Mailbox/Pickups/Subscribers endpoints owner_required
+    covers on the website -- see that docstring."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if g.get("admin_identity") not in ADMIN_ROLES_FULL_ACCESS:
+            return jsonify(error="This account doesn't have access to that."), 403
         return view(*args, **kwargs)
     return wrapped
 
@@ -1624,21 +1866,61 @@ def admin_login():
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
-        username_ok = secrets.compare_digest(username, ADMIN_USERNAME)
-        password_ok = secrets.compare_digest(password, ADMIN_PASSWORD)
-        if username_ok and password_ok:
+        identity = _match_admin_credentials(username, password)
+        if identity:
+            next_url = request.args.get("next") or url_for("admin_dashboard")
+            if mfa_is_enabled(identity):
+                # Password's right, but there's a second step before the
+                # session is actually marked in — see admin_login_verify().
+                # mfa_pending is what proves that step is allowed to run.
+                session["mfa_pending"] = True
+                session["mfa_pending_identity"] = identity
+                session["mfa_pending_next"] = next_url
+                return redirect(url_for("admin_login_verify"))
             session.permanent = True  # use the 30-day PERMANENT_SESSION_LIFETIME
             session["is_admin"] = True
+            session["admin_identity"] = identity
             flash("Logged in.", "success")
-            next_url = request.args.get("next") or url_for("admin_dashboard")
             return redirect(next_url)
         flash("Incorrect username or password.", "error")
     return render_template("admin/login.html")
 
 
+@app.route("/admin/login/verify", methods=["GET", "POST"])
+def admin_login_verify():
+    """Second step of admin login, only reached once the username/password
+    check in admin_login() has already passed (session["mfa_pending"]
+    proves it) and only when that account has 2FA turned on."""
+    identity = session.get("mfa_pending_identity")
+    if not session.get("mfa_pending") or not identity:
+        return redirect(url_for("admin_login"))
+    if request.method == "POST":
+        code = request.form.get("code", "")
+        if verify_mfa_code(identity, code):
+            next_url = session.pop("mfa_pending_next", None) or url_for("admin_dashboard")
+            session.pop("mfa_pending", None)
+            session.pop("mfa_pending_identity", None)
+            session.permanent = True
+            session["is_admin"] = True
+            session["admin_identity"] = identity
+            flash("Logged in.", "success")
+            return redirect(next_url)
+        flash("That code didn't match. You can also use one of your backup codes.", "error")
+    return render_template("admin/login_verify.html")
+
+
+@app.route("/admin/login/verify/cancel")
+def admin_login_verify_cancel():
+    session.pop("mfa_pending", None)
+    session.pop("mfa_pending_identity", None)
+    session.pop("mfa_pending_next", None)
+    return redirect(url_for("admin_login"))
+
+
 @app.route("/admin/logout")
 def admin_logout():
     session.pop("is_admin", None)
+    session.pop("admin_identity", None)
     flash("Logged out.", "success")
     return redirect(url_for("home"))
 
@@ -1707,6 +1989,7 @@ def admin_post_delete(post_id):
 
 @app.route("/admin/mailbox")
 @login_required
+@owner_required
 def admin_mailbox():
     # One row per conversation (thread_key), showing that conversation's
     # most recent message, newest conversation first.
@@ -1738,6 +2021,7 @@ def admin_mailbox():
 
 @app.route("/admin/mailbox/<thread_key>")
 @login_required
+@owner_required
 def admin_mailbox_thread(thread_key):
     thread_key = thread_key.lower()
     messages = (
@@ -1767,6 +2051,7 @@ def admin_mailbox_thread(thread_key):
 
 @app.route("/admin/mailbox/<thread_key>/reply", methods=["POST"])
 @login_required
+@owner_required
 def admin_mailbox_reply(thread_key):
     thread_key = thread_key.lower()
     if not MailboxMessage.query.filter_by(thread_key=thread_key).first():
@@ -1783,6 +2068,7 @@ def admin_mailbox_reply(thread_key):
 
 @app.route("/admin/mailbox/compose", methods=["GET", "POST"])
 @login_required
+@owner_required
 def admin_mailbox_compose():
     if request.method == "POST":
         to_email = request.form.get("to_email", "").strip().lower()
@@ -1804,6 +2090,7 @@ def admin_mailbox_compose():
 
 @app.route("/admin/orders")
 @login_required
+@owner_required
 def admin_orders():
     orders = Order.query.order_by(Order.created_at.desc()).all()
     return render_template("admin/orders.html", orders=orders)
@@ -1811,6 +2098,7 @@ def admin_orders():
 
 @app.route("/admin/orders/<int:order_id>")
 @login_required
+@owner_required
 def admin_order_detail(order_id):
     order = Order.query.get_or_404(order_id)
     return render_template("admin/order_detail.html", order=order, statuses=ORDER_STATUSES)
@@ -1818,6 +2106,7 @@ def admin_order_detail(order_id):
 
 @app.route("/admin/orders/<int:order_id>/status", methods=["POST"])
 @login_required
+@owner_required
 def admin_order_update_status(order_id):
     order = Order.query.get_or_404(order_id)
     status = request.form.get("status", "").strip()
@@ -1832,6 +2121,7 @@ def admin_order_update_status(order_id):
 
 @app.route("/admin/orders/<int:order_id>/invoice.pdf")
 @login_required
+@owner_required
 def admin_order_invoice(order_id):
     order = Order.query.get_or_404(order_id)
     return _order_invoice_pdf_response(order)
@@ -1844,6 +2134,7 @@ def admin_order_invoice(order_id):
 
 @app.route("/admin/invoices")
 @login_required
+@owner_required
 def admin_invoices():
     invoices = ManualInvoice.query.order_by(ManualInvoice.created_at.desc()).all()
     return render_template("admin/invoices.html", invoices=invoices)
@@ -1851,6 +2142,7 @@ def admin_invoices():
 
 @app.route("/admin/invoices/new", methods=["GET", "POST"])
 @login_required
+@owner_required
 def admin_invoice_new():
     if request.method == "POST":
         customer_name = request.form.get("customer_name", "").strip()
@@ -1938,6 +2230,7 @@ def admin_invoice_new():
 
 @app.route("/admin/invoices/<int:invoice_id>")
 @login_required
+@owner_required
 def admin_invoice_detail(invoice_id):
     invoice = ManualInvoice.query.get_or_404(invoice_id)
     return render_template("admin/invoice_detail.html", invoice=invoice)
@@ -1945,6 +2238,7 @@ def admin_invoice_detail(invoice_id):
 
 @app.route("/admin/invoices/<int:invoice_id>/pdf")
 @login_required
+@owner_required
 def admin_invoice_pdf(invoice_id):
     invoice = ManualInvoice.query.get_or_404(invoice_id)
     return _manual_invoice_pdf_response(invoice)
@@ -1952,6 +2246,7 @@ def admin_invoice_pdf(invoice_id):
 
 @app.route("/admin/invoices/<int:invoice_id>/delete", methods=["POST"])
 @login_required
+@owner_required
 def admin_invoice_delete(invoice_id):
     invoice = ManualInvoice.query.get_or_404(invoice_id)
     db.session.delete(invoice)
@@ -1962,6 +2257,7 @@ def admin_invoice_delete(invoice_id):
 
 @app.route("/admin/pickups")
 @login_required
+@owner_required
 def admin_pickups():
     pickups = PickupRequest.query.order_by(PickupRequest.pickup_date.asc()).all()
     return render_template("admin/pickups.html", pickups=pickups, statuses=PICKUP_STATUSES)
@@ -1969,6 +2265,7 @@ def admin_pickups():
 
 @app.route("/admin/pickups/<int:pickup_id>/status", methods=["POST"])
 @login_required
+@owner_required
 def admin_pickup_update_status(pickup_id):
     pickup = PickupRequest.query.get_or_404(pickup_id)
     status = request.form.get("status", "").strip()
@@ -1983,6 +2280,7 @@ def admin_pickup_update_status(pickup_id):
 
 @app.route("/admin/subscribers")
 @login_required
+@owner_required
 def admin_subscribers():
     subscribers = Subscriber.query.order_by(Subscriber.created_at.desc()).all()
     return render_template("admin/subscribers.html", subscribers=subscribers)
@@ -1990,6 +2288,7 @@ def admin_subscribers():
 
 @app.route("/admin/subscribers/export.csv")
 @login_required
+@owner_required
 def admin_subscribers_export():
     subscribers = Subscriber.query.order_by(Subscriber.created_at.asc()).all()
     buffer = io.StringIO()
@@ -2009,6 +2308,7 @@ def admin_subscribers_export():
 
 @app.route("/admin/subscribers/<int:subscriber_id>/delete", methods=["POST"])
 @login_required
+@owner_required
 def admin_subscriber_delete(subscriber_id):
     subscriber = Subscriber.query.get_or_404(subscriber_id)
     db.session.delete(subscriber)
@@ -2173,7 +2473,11 @@ def admin_settings():
         # If new_filename is None, save_uploaded_image already flashed why
         # (bad file type).
         return redirect(url_for("admin_settings"))
-    return render_template("admin/settings.html", social_platforms=SOCIAL_PLATFORMS)
+    return render_template(
+        "admin/settings.html",
+        social_platforms=SOCIAL_PLATFORMS,
+        mfa_enabled=mfa_is_enabled(session.get("admin_identity", "owner")),
+    )
 
 
 @app.route("/admin/settings/favicon/remove", methods=["POST"])
@@ -2196,6 +2500,134 @@ def admin_settings_social():
         set_setting(key, value or None)
     db.session.commit()
     flash("Social media links updated.", "success")
+    return redirect(url_for("admin_settings"))
+
+
+# ---------------------------------------------------------------------------
+# Two-factor authentication setup (web admin + mobile app both check the
+# Setting rows this writes — see the comment above ADMIN_USERNAME).
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/settings/mfa/enable", methods=["POST"])
+@login_required
+def admin_settings_mfa_enable():
+    """Step 1: generate a new secret and send the current account to the
+    QR/confirm page. Nothing is active yet — the pending secret isn't
+    checked by any login route, only the confirmed one is, and that's only
+    set once this account proves it's actually scanned it
+    (admin_settings_mfa_setup)."""
+    identity = session.get("admin_identity", "owner")
+    if mfa_is_enabled(identity):
+        return redirect(url_for("admin_settings"))
+    secret = pyotp.random_base32()
+    set_setting(_mfa_setting_key("mfa_totp_secret_pending", identity), secret)
+    return redirect(url_for("admin_settings_mfa_setup"))
+
+
+def _admin_display_username(identity):
+    return ADMIN_USERNAME if identity == "owner" else CREATOR_USERNAME
+
+
+@app.route("/admin/settings/mfa/setup", methods=["GET", "POST"])
+@login_required
+def admin_settings_mfa_setup():
+    identity = session.get("admin_identity", "owner")
+    pending_secret = get_setting(_mfa_setting_key("mfa_totp_secret_pending", identity))
+    if not pending_secret:
+        flash("Start two-factor setup from Settings first.", "error")
+        return redirect(url_for("admin_settings"))
+    if request.method == "POST":
+        code = request.form.get("code", "")
+        if _totp_for_secret(pending_secret).verify((code or "").strip(), valid_window=1):
+            set_setting(_mfa_setting_key("mfa_totp_secret", identity), pending_secret)
+            set_setting(_mfa_setting_key("mfa_enabled", identity), "1")
+            set_setting(_mfa_setting_key("mfa_totp_secret_pending", identity), None)
+            session["mfa_new_backup_codes"] = generate_backup_codes(identity)
+            flash("Two-factor authentication is on.", "success")
+            return redirect(url_for("admin_settings_mfa_backup_codes"))
+        flash("That code didn't match — double check the time on your phone and try again.", "error")
+    # Distinguishing issuer names ("... — Owner" / "... — Creator") so the
+    # two accounts show up as separate entries in an authenticator app that
+    # ends up holding both.
+    provisioning_uri = _totp_for_secret(pending_secret).provisioning_uri(
+        name=_admin_display_username(identity),
+        issuer_name=f"{COMPANY['name']} — {identity.capitalize()}",
+    )
+    return render_template(
+        "admin/mfa_setup.html", secret=pending_secret, provisioning_uri=provisioning_uri,
+    )
+
+
+@app.route("/admin/settings/mfa/setup/qr.png")
+@login_required
+def admin_settings_mfa_qr():
+    identity = session.get("admin_identity", "owner")
+    pending_secret = get_setting(_mfa_setting_key("mfa_totp_secret_pending", identity))
+    if not pending_secret:
+        abort(404)
+    uri = _totp_for_secret(pending_secret).provisioning_uri(
+        name=_admin_display_username(identity),
+        issuer_name=f"{COMPANY['name']} — {identity.capitalize()}",
+    )
+    img = qrcode.make(uri)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(buf.getvalue(), mimetype="image/png")
+
+
+@app.route("/admin/settings/mfa/setup/cancel", methods=["POST"])
+@login_required
+def admin_settings_mfa_setup_cancel():
+    set_setting(_mfa_setting_key("mfa_totp_secret_pending", session.get("admin_identity", "owner")), None)
+    flash("Two-factor setup cancelled — nothing was turned on.", "success")
+    return redirect(url_for("admin_settings"))
+
+
+@app.route("/admin/settings/mfa/backup-codes")
+@login_required
+def admin_settings_mfa_backup_codes():
+    """Shows freshly generated backup codes exactly once, right after
+    they're created (by admin_settings_mfa_setup or
+    admin_settings_mfa_regenerate_backup_codes, which stash them in the
+    session just for this one view). Reloading this page after that
+    session value is gone just bounces back to Settings — the plaintext
+    codes are never stored anywhere retrievable, only their hashes."""
+    codes = session.pop("mfa_new_backup_codes", None)
+    if not codes:
+        flash("Backup codes are only shown once, right after they're generated.", "error")
+        return redirect(url_for("admin_settings"))
+    return render_template("admin/mfa_backup_codes.html", codes=codes)
+
+
+@app.route("/admin/settings/mfa/backup-codes/regenerate", methods=["POST"])
+@login_required
+def admin_settings_mfa_regenerate_backup_codes():
+    identity = session.get("admin_identity", "owner")
+    if not mfa_is_enabled(identity):
+        return redirect(url_for("admin_settings"))
+    session["mfa_new_backup_codes"] = generate_backup_codes(identity)
+    flash("New backup codes generated — your old ones no longer work.", "success")
+    return redirect(url_for("admin_settings_mfa_backup_codes"))
+
+
+@app.route("/admin/settings/mfa/disable", methods=["POST"])
+@login_required
+def admin_settings_mfa_disable():
+    """Requires the current password again (not just today's already-open
+    session) as a speed bump against someone at an unlocked screen turning
+    2FA off. Checked against whichever account (owner or creator) is
+    currently logged in."""
+    identity = session.get("admin_identity", "owner")
+    password = request.form.get("password", "")
+    expected_password = ADMIN_PASSWORD if identity == "owner" else CREATOR_PASSWORD
+    if not secrets.compare_digest(password, expected_password):
+        flash("Incorrect password — two-factor authentication was not disabled.", "error")
+        return redirect(url_for("admin_settings"))
+    set_setting(_mfa_setting_key("mfa_enabled", identity), None)
+    set_setting(_mfa_setting_key("mfa_totp_secret", identity), None)
+    set_setting(_mfa_setting_key("mfa_totp_secret_pending", identity), None)
+    set_setting(_mfa_setting_key("mfa_backup_codes", identity), None)
+    flash("Two-factor authentication is off.", "success")
     return redirect(url_for("admin_settings"))
 
 
@@ -2323,14 +2755,30 @@ def api_login():
     data = request.get_json(silent=True) or request.form
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
-    username_ok = secrets.compare_digest(username, ADMIN_USERNAME)
-    password_ok = secrets.compare_digest(password, ADMIN_PASSWORD)
-    if not (username_ok and password_ok):
+    identity = _match_admin_credentials(username, password)
+    if not identity:
         return jsonify(error="Incorrect username or password."), 401
-    token = _mobile_token_serializer.dumps({"u": username})
+    if mfa_is_enabled(identity):
+        # Same TOTP/backup-code setup as the web login (see the Setting
+        # rows documented above ADMIN_USERNAME). The app sends this as an
+        # optional "totp" field alongside username/password; a live 6-digit
+        # authenticator code or an unused backup code both work (see
+        # verify_mfa_code). mfa_required=True tells the app "prompt for a
+        # code and retry the same request with it filled in" — that's a
+        # different situation from a wrong username/password, which is
+        # still the plain error above with no mfa_required flag.
+        code = (data.get("totp") or "").strip()
+        if not verify_mfa_code(identity, code):
+            return jsonify(
+                error="A verification code is required." if not code else "Incorrect verification code.",
+                mfa_required=True,
+            ), 401
+    # "id" (owner/creator) is what api_login_required reads back into
+    # flask.g and api_owner_required checks — see both above.
+    token = _mobile_token_serializer.dumps({"u": username, "id": identity})
     return jsonify(
         token=token,
-        username=ADMIN_USERNAME,
+        username=username,
         company_name=COMPANY["name"],
         expires_in_seconds=MOBILE_TOKEN_MAX_AGE_SECONDS,
     )
@@ -2340,8 +2788,15 @@ def api_login():
 @api_login_required
 def api_me():
     return jsonify(
-        username=ADMIN_USERNAME,
+        username=g.admin_username,
         company_name=COMPANY["name"],
+        # Kept the same for both accounts rather than trimmed down for the
+        # creator: these are just status label lists and quick-reply
+        # templates, not customer data, and api_me is the one endpoint
+        # every screen calls regardless of role (it's what the
+        # owner-only-gated screens use to build their dropdowns) — this
+        # response is shared, so narrowing it here would break those
+        # screens for the owner too.
         order_statuses=ORDER_STATUSES,
         pickup_statuses=PICKUP_STATUSES,
         product_categories=[{"value": v, "label": l} for v, l in PRODUCT_CATEGORIES],
@@ -2351,6 +2806,7 @@ def api_me():
 
 @app.route("/api/v1/summary")
 @api_login_required
+@api_owner_required
 def api_summary():
     orders_awaiting_payment = Order.query.filter_by(status="Awaiting Payment").count()
     pickups_requested = PickupRequest.query.filter_by(status="Requested").count()
@@ -2368,6 +2824,7 @@ def api_summary():
 
 @app.route("/api/v1/orders")
 @api_login_required
+@api_owner_required
 def api_orders():
     query = Order.query
     status = request.args.get("status", "").strip()
@@ -2384,6 +2841,7 @@ def api_orders():
 
 @app.route("/api/v1/orders/<int:order_id>")
 @api_login_required
+@api_owner_required
 def api_order_detail(order_id):
     order = Order.query.get_or_404(order_id)
     return jsonify(order=_order_to_dict(order, include_items=True))
@@ -2391,6 +2849,7 @@ def api_order_detail(order_id):
 
 @app.route("/api/v1/orders/<int:order_id>/status", methods=["POST"])
 @api_login_required
+@api_owner_required
 def api_order_update_status(order_id):
     order = Order.query.get_or_404(order_id)
     data = request.get_json(silent=True) or {}
@@ -2404,6 +2863,7 @@ def api_order_update_status(order_id):
 
 @app.route("/api/v1/orders/<int:order_id>/invoice.pdf")
 @api_login_required
+@api_owner_required
 def api_order_invoice(order_id):
     order = Order.query.get_or_404(order_id)
     response = _order_invoice_pdf_response(order)
@@ -2413,6 +2873,7 @@ def api_order_invoice(order_id):
 
 @app.route("/api/v1/invoices/manual", methods=["POST"])
 @api_login_required
+@api_owner_required
 def api_manual_invoice():
     """Mirrors the web admin's /admin/invoices/new (see ManualInvoice above)
     so the companion Android app's manual-invoice screen creates a real,
@@ -2525,6 +2986,7 @@ def api_manual_invoice():
 
 @app.route("/api/v1/invoices")
 @api_login_required
+@api_owner_required
 def api_invoices():
     """Lists manual invoices for the app's Invoices tab — including ones
     created from the web admin at /admin/invoices/new, not just ones the
@@ -2535,6 +2997,7 @@ def api_invoices():
 
 @app.route("/api/v1/invoices/<int:invoice_id>/pdf")
 @api_login_required
+@api_owner_required
 def api_invoice_pdf(invoice_id):
     invoice = ManualInvoice.query.get_or_404(invoice_id)
     response = _manual_invoice_pdf_response(invoice)
@@ -2544,6 +3007,7 @@ def api_invoice_pdf(invoice_id):
 
 @app.route("/api/v1/pickups")
 @api_login_required
+@api_owner_required
 def api_pickups():
     query = PickupRequest.query
     status = request.args.get("status", "").strip()
@@ -2560,6 +3024,7 @@ def api_pickups():
 
 @app.route("/api/v1/pickups/<int:pickup_id>")
 @api_login_required
+@api_owner_required
 def api_pickup_detail(pickup_id):
     pickup = PickupRequest.query.get_or_404(pickup_id)
     return jsonify(pickup=_pickup_to_dict(pickup))
@@ -2567,6 +3032,7 @@ def api_pickup_detail(pickup_id):
 
 @app.route("/api/v1/pickups/<int:pickup_id>/status", methods=["POST"])
 @api_login_required
+@api_owner_required
 def api_pickup_update_status(pickup_id):
     pickup = PickupRequest.query.get_or_404(pickup_id)
     data = request.get_json(silent=True) or {}
@@ -2580,6 +3046,7 @@ def api_pickup_update_status(pickup_id):
 
 @app.route("/api/v1/mailbox")
 @api_login_required
+@api_owner_required
 def api_mailbox():
     # Same "one row per conversation, newest first" shape as /admin/mailbox.
     latest_ids = (
@@ -2619,6 +3086,7 @@ def api_mailbox():
 
 @app.route("/api/v1/mailbox/<thread_key>")
 @api_login_required
+@api_owner_required
 def api_mailbox_thread(thread_key):
     thread_key = thread_key.lower()
     messages = (
@@ -2649,6 +3117,7 @@ def api_mailbox_thread(thread_key):
 
 @app.route("/api/v1/mailbox/<thread_key>/reply", methods=["POST"])
 @api_login_required
+@api_owner_required
 def api_mailbox_reply(thread_key):
     thread_key = thread_key.lower()
     if not MailboxMessage.query.filter_by(thread_key=thread_key).first():
@@ -2666,6 +3135,7 @@ def api_mailbox_reply(thread_key):
 
 @app.route("/api/v1/mailbox/compose", methods=["POST"])
 @api_login_required
+@api_owner_required
 def api_mailbox_compose():
     data = request.get_json(silent=True) or {}
     to_email = (data.get("to_email") or "").strip().lower()
@@ -2770,6 +3240,7 @@ def api_product_delete(product_id):
 
 @app.route("/api/v1/subscribers")
 @api_login_required
+@api_owner_required
 def api_subscribers():
     subscribers = Subscriber.query.order_by(Subscriber.created_at.desc()).all()
     return jsonify(subscribers=[_subscriber_to_dict(s) for s in subscribers])
@@ -2777,6 +3248,7 @@ def api_subscribers():
 
 @app.route("/api/v1/subscribers/<int:subscriber_id>/delete", methods=["POST"])
 @api_login_required
+@api_owner_required
 def api_subscriber_delete(subscriber_id):
     subscriber = Subscriber.query.get_or_404(subscriber_id)
     db.session.delete(subscriber)
