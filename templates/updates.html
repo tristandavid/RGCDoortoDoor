@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Updates | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="container">
+    <h1>Updates &amp; Announcements</h1>
+    <p>News, promotions, and important shipping updates from RGC</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container">
+    <div class="grid-2">
+      {% for post in posts %}
+        <a href="{{ url_for('update_detail', post_id=post.id) }}" class="card" style="display:block;">
+          {% if post.image_url %}
+            <img src="{{ post.image_url }}" alt="" style="width:100%; border-radius:10px; margin-bottom:16px; max-height:220px; object-fit:cover;">
+          {% endif %}
+          <h3>{{ post.title }}</h3>
+          <p>{{ post.body[:180] }}{% if post.body|length > 180 %}&hellip;{% endif %}</p>
+          <p style="color:var(--text-muted); font-size:0.85rem; margin-top:12px;">{{ post.created_at.strftime('%B %d, %Y') }}</p>
+        </a>
+      {% else %}
+        <p>No updates posted yet &mdash; check back soon!</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% endblock %}

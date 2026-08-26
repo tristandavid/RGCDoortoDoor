@@ -1,0 +1,52 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Mailbox | {{ company.name }}{% endblock %}
+{% block page_title %}Mailbox{% endblock %}
+{% block page_subtitle %}<p>Everything sent to {{ company.contact_email }}</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-actions" style="margin-bottom:18px;">
+  <a href="{{ url_for('admin_mailbox_compose') }}" class="btn btn-primary">+ Compose</a>
+</div>
+
+<div class="admin-card">
+  <p style="color:var(--text-muted); margin-bottom:16px;">
+    Only contact-form messages show up here automatically. Other mail sent
+    to {{ company.contact_email }} isn't mirrored — check the real mailbox
+    directly for that.
+  </p>
+
+  <div class="table-scroll">
+<table class="admin-table">
+    <thead>
+      <tr>
+        <th>From</th>
+        <th>Subject</th>
+        <th>Preview</th>
+        <th>Date</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for msg in threads %}
+      {% set unread = unread_counts.get(msg.thread_key, 0) %}
+      <tr style="{{ 'font-weight:700;' if unread else '' }}">
+        <td>
+          {{ msg.thread_key }}
+          {% if unread %}
+            <span class="badge badge-status">{{ unread }} new</span>
+          {% endif %}
+        </td>
+        <td>{{ msg.subject or '(no subject)' }}</td>
+        <td style="font-weight:400; color:var(--text-muted);">{{ msg.preview }}</td>
+        <td style="font-weight:400;">{{ msg.created_at.strftime('%b %d, %Y %I:%M %p') }}</td>
+        <td><a href="{{ url_for('admin_mailbox_thread', thread_key=msg.thread_key) }}" class="btn btn-small btn-primary">Open</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">No messages yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+
+{% endblock %}

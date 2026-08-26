@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Page Not Found | {{ company.name }}{% endblock %}
+{% block content %}
+<section class="section" style="text-align:center;">
+  <div class="container">
+    <h1 style="font-size:3rem;">📦 404</h1>
+    <p>Looks like this box got lost in transit. Let's get you back on track.</p>
+    <a href="{{ url_for('home') }}" class="btn btn-primary">Back to Home</a>
+  </div>
+</section>
+{% endblock %}

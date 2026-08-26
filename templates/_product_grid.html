@@ -1,0 +1,42 @@
+{# Expects `products` in context. #}
+<p class="shop-count">{{ products|length }} item{{ 's' if products|length != 1 }}</p>
+<div class="shop-grid">
+  {% for product in products %}
+    <div class="shop-card">
+      <div class="shop-card-media">
+        <span class="shop-card-badge">{{ product.category_label }}</span>
+        {% if product.image_url %}
+          <img src="{{ product.image_url }}" alt="{{ product.name }}" class="product-image">
+        {% else %}
+          <div class="shop-card-media-placeholder" aria-hidden="true">📦</div>
+        {% endif %}
+      </div>
+      <div class="shop-card-body">
+        <h3>{{ product.name }}</h3>
+        {% if product.description %}<p>{{ product.description }}</p>{% endif %}
+        <div class="shop-card-footer">
+          <div class="shop-card-price">
+            {% if product.price is not none %}
+              <span class="price-amount">${{ "%.2f"|format(product.price) }}</span><span class="price-currency">CAD</span>
+              <span class="price-tax-note">+ 13% HST at checkout</span>
+            {% else %}
+              <span class="price-contact">Contact for pricing</span>
+            {% endif %}
+          </div>
+          {% if product.price is not none %}
+            <form method="post" action="{{ url_for('cart_add', product_id=product.id) }}" class="add-to-cart-form">
+              <div class="qty-stepper">
+                <button type="button" class="qty-btn qty-minus" aria-label="Decrease quantity">&minus;</button>
+                <input type="number" name="quantity" value="1" min="1" max="99" aria-label="Quantity">
+                <button type="button" class="qty-btn qty-plus" aria-label="Increase quantity">+</button>
+              </div>
+              <button type="submit" class="btn btn-primary btn-add-cart">🛒 Add to Cart</button>
+            </form>
+          {% else %}
+            <a href="{{ url_for('contact_us') }}" class="btn btn-outline btn-small" style="color:var(--primary); border-color:var(--primary); width:100%; text-align:center; margin-top:10px;">Contact Us</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>

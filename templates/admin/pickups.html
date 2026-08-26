@@ -1,0 +1,52 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Pickup Requests | {{ company.name }}{% endblock %}
+{% block page_title %}Pickup Requests{% endblock %}
+{% block page_subtitle %}<p>Everyone who's requested a box pickup via "Book a Pick Up"</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  {% if not pickups %}
+    <p style="color:var(--text-muted);">No pickup requests yet.</p>
+  {% else %}
+    <div class="table-scroll">
+<table class="admin-table">
+      <thead>
+        <tr>
+          <th>Customer</th>
+          <th>Pickup Address</th>
+          <th>Preferred Date</th>
+          <th>Time Window</th>
+          <th>Boxes</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pickup in pickups %}
+        <tr>
+          <td>
+            {{ pickup.name }}<br>
+            <span style="color:var(--text-muted); font-size:0.85rem;">{{ pickup.email }}<br>{{ pickup.phone }}</span>
+          </td>
+          <td style="max-width:220px; white-space:pre-wrap;">{{ pickup.address }}</td>
+          <td>{{ pickup.pickup_date.strftime('%b %d, %Y') }}</td>
+          <td>{{ pickup.time_window }}</td>
+          <td>{{ pickup.box_count or '—' }}</td>
+          <td>
+            <form method="post" action="{{ url_for('admin_pickup_update_status', pickup_id=pickup.id) }}" style="display:flex; gap:6px; align-items:center;">
+              <span class="badge {{ pickup.status_badge_class }}">{{ pickup.status }}</span>
+              <select name="status" style="width:auto; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;" onchange="this.form.submit()">
+                {% for s in statuses %}
+                  <option value="{{ s }}" {% if s == pickup.status %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+</div>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ post.title }} | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="container">
+    <h1>{{ post.title }}</h1>
+    <p>{{ post.created_at.strftime('%B %d, %Y') }}{% if not post.is_published %} &mdash; <strong>Draft (not public)</strong>{% endif %}</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container" style="max-width:760px;">
+    {% if post.image_url %}
+      <img src="{{ post.image_url }}" alt="" style="width:100%; border-radius:14px; margin-bottom:26px;">
+    {% endif %}
+    <p style="white-space:pre-line; line-height:1.7; font-size:1.05rem;">{{ post.body }}</p>
+    <a href="{{ url_for('updates') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary); margin-top:20px;">&larr; Back to Updates</a>
+  </div>
+</section>
+
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Invoice {{ invoice.invoice_number }} | {{ company.name }}{% endblock %}
+{% block page_title %}Invoice {{ invoice.invoice_number }}{% endblock %}
+{% block page_subtitle %}<p>{{ invoice.issue_date.strftime('%B %d, %Y') }}</p>{% endblock %}
+{% block admin_content %}
+
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+  <a href="{{ url_for('admin_invoices') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary);">&larr; Back to Invoices</a>
+  <a href="{{ url_for('admin_invoice_pdf', invoice_id=invoice.id) }}" class="btn btn-primary" target="_blank">🧾 Download Invoice</a>
+</div>
+
+<div class="grid-2">
+  <div class="admin-card">
+    <h3 style="margin-top:0;">Bill To</h3>
+    <p>
+      <strong>{{ invoice.customer_name }}</strong><br>
+      {% if invoice.customer_email %}{{ invoice.customer_email }}<br>{% endif %}
+      {% if invoice.customer_phone %}{{ invoice.customer_phone }}<br>{% endif %}
+      {% if invoice.customer_address %}{{ invoice.customer_address }}{% endif %}
+    </p>
+    {% if invoice.notes %}
+      <h3>Notes</h3>
+      <p style="white-space:pre-wrap;">{{ invoice.notes }}</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('admin_invoice_delete', invoice_id=invoice.id) }}" onsubmit="return confirm('Delete invoice {{ invoice.invoice_number }}? This cannot be undone.');" style="margin-top:16px;">
+      <button type="submit" class="btn btn-small btn-danger">Delete Invoice</button>
+    </form>
+  </div>
+
+  <div class="admin-card">
+    <h3 style="margin-top:0;">Items</h3>
+    <div class="table-scroll">
+<table class="admin-table">
+      <thead>
+        <tr><th>Description</th><th>Qty</th><th>Unit</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for item in invoice.items %}
+        <tr>
+          <td>{{ item.description }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>${{ "%.2f"|format(item.unit_price) }}</td>
+          <td>${{ "%.2f"|format(item.line_total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+</div>
+    <div style="margin-top:12px; max-width:260px; margin-left:auto;">
+      <div style="display:flex; justify-content:space-between; color:var(--text-muted);">
+        <span>Subtotal</span><span>${{ "%.2f"|format(invoice.subtotal) }}</span>
+      </div>
+      {% if invoice.has_tax %}
+        <div style="display:flex; justify-content:space-between; color:var(--text-muted); margin-top:4px;">
+          <span>{{ invoice.tax_label }}</span><span>${{ "%.2f"|format(invoice.tax_amount) }}</span>
+        </div>
+      {% endif %}
+      <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1.1rem; color:var(--primary-dark); margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
+        <span>Total</span><span>${{ "%.2f"|format(invoice.total) }} CAD</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Rates | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="container">
+    <h1>Rates</h1>
+    <p>Sample pricing guide &mdash; contact us for current rates</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <h2>Shipping Rates by Destination</h2>
+      <p>Base rate per box, by where in the Philippines it's headed.</p>
+    </div>
+    <div class="table-scroll">
+<table class="rates-table">
+      <thead>
+        <tr>
+          <th>Destination</th>
+          <th>Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Manila (NCR / Metro Manila)</td>
+          <td>$100.00</td>
+        </tr>
+        <tr>
+          <td>
+            Luzon (Outside Metro Manila)<br>
+            <span style="color:var(--text-muted); font-size:0.85rem; font-weight:400;">
+              Cavite &rarr; Laguna &rarr; Rizal &rarr; Batangas &rarr; Bulacan &rarr; Pampanga
+            </span>
+          </td>
+          <td>$105.00</td>
+        </tr>
+        <tr>
+          <td>
+            Luzon (Any Point of Luzon)<br>
+            <span style="color:var(--text-muted); font-size:0.85rem; font-weight:400;">
+              Except: Baguio, Ifugao, Mt. Province, Kalinga, Apayao, Mimaropa,
+              Bicol, Camarines, Sorsogon
+            </span>
+          </td>
+          <td>$110.00</td>
+        </tr>
+        <tr>
+          <td>Visayas <span style="color:var(--text-muted); font-size:0.85rem; font-weight:400;">(except Hard Port areas)***</span></td>
+          <td>$120.00</td>
+        </tr>
+        <tr>
+          <td>Mindanao <span style="color:var(--text-muted); font-size:0.85rem; font-weight:400;">(except Hard Port areas)***</span></td>
+          <td>$125.00</td>
+        </tr>
+      </tbody>
+    </table>
+</div>
+
+    <div class="section-header" style="margin-top:48px;">
+      <h2>Hard Ports <span style="color:var(--text-muted); font-weight:400; font-size:1rem;">&mdash; additional cost</span></h2>
+    </div>
+    <div class="table-scroll">
+<table class="rates-table">
+      <thead>
+        <tr>
+          <th>Area</th>
+          <th>Additional Cost</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Mindoro Occ</td><td>$48.00</td></tr>
+        <tr><td>Mindoro Or</td><td>$48.00</td></tr>
+        <tr><td>Romblon</td><td>$48.00</td></tr>
+        <tr><td>Aurora</td><td>$48.00</td></tr>
+      </tbody>
+    </table>
+</div>
+
+    <div class="section-header" style="margin-top:48px;">
+      <h2>Super Hard Ports <span style="color:var(--text-muted); font-weight:400; font-size:1rem;">&mdash; additional cost</span></h2>
+    </div>
+    <div class="table-scroll">
+<table class="rates-table">
+      <thead>
+        <tr>
+          <th>Area</th>
+          <th>Additional Cost</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Bantayan</td><td>$78.00</td></tr>
+        <tr><td>Catanduanes</td><td>$78.00</td></tr>
+        <tr><td>Cebu Island</td><td>$78.00</td></tr>
+        <tr><td>Guimaras</td><td>$78.00</td></tr>
+        <tr><td>Marinduque</td><td>$78.00</td></tr>
+        <tr><td>Masbate</td><td>$78.00</td></tr>
+        <tr><td>Palawan</td><td>$78.00</td></tr>
+      </tbody>
+    </table>
+</div>
+    <div class="note-box">
+      ***&nbsp; The areas listed under Hard Ports and Super Hard Ports have an
+      <strong>additional cost</strong> on top of the base Visayas/Mindanao rate above.
+    </div>
+
+    <div class="section-header" style="margin-top:48px;">
+      <h2>Box Sizes</h2>
+    </div>
+    <div class="table-scroll">
+<table class="rates-table">
+      <thead>
+        <tr>
+          <th>Box Size</th>
+          <th>Approx. Dimensions</th>
+          <th>Standard Rate</th>
+          <th>Mobile Warehouse Drop-Off</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Small Box</td>
+          <td>18&quot; x 18&quot; x 16&quot;</td>
+          <td>Contact for pricing</td>
+          <td>$10.00 off</td>
+        </tr>
+        <tr>
+          <td>Medium Box</td>
+          <td>20&quot; x 20&quot; x 20&quot;</td>
+          <td>Contact for pricing</td>
+          <td>$10.00 off</td>
+        </tr>
+        <tr>
+          <td>Large Box</td>
+          <td>24&quot; x 24&quot; x 24&quot;</td>
+          <td>Contact for pricing</td>
+          <td>$10.00 off</td>
+        </tr>
+        <tr>
+          <td>Weekly Air Cargo</td>
+          <td>Varies by item</td>
+          <td>Contact for pricing</td>
+          <td>$10.00 off</td>
+        </tr>
+      </tbody>
+    </table>
+</div>
+    <div class="note-box">
+      💰 DROP OFF YOUR BOX at OUR MOBILE WAREHOUSE and GET $10.00 DOLLARS OFF
+      PER BOX
+    </div>
+
+    <div class="section-header" style="margin-top:48px;">
+      <p>Rates vary depending on destination (including hard port and super
+        hard port areas), box weight, and current promotions. Reach out for
+        an accurate, up-to-date quote.</p>
+      <a href="{{ url_for('contact_us') }}" class="btn btn-primary">Get a Quote</a>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

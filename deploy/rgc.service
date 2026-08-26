@@ -1,0 +1,18 @@
+[Unit]
+Description=RGC Door-to-Door Box Express Services (Flask/Gunicorn)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=rgcapp
+Group=rgcapp
+WorkingDirectory=/opt/rgcdoortodoor
+EnvironmentFile=/opt/rgcdoortodoor/.env
+ExecStart=/opt/rgcdoortodoor/venv/bin/gunicorn --workers 3 --timeout 60 --bind 127.0.0.1:8000 app:app
+Restart=always
+RestartSec=5
+
+# Starts automatically on boot and restarts automatically if it ever crashes
+# — the two things Render was doing for you before.
+[Install]
+WantedBy=multi-user.target

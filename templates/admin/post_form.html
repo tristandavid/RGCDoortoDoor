@@ -1,0 +1,36 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}{{ 'Edit Post' if post else 'New Post' }} | {{ company.name }}{% endblock %}
+{% block page_title %}{{ 'Edit Post' if post else 'New Post' }}{% endblock %}
+{% block page_subtitle %}<p>Share an announcement, promotion, or news update with your customers</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <form class="admin-form" method="post" enctype="multipart/form-data">
+    <div>
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" value="{{ post.title if post else '' }}" required>
+    </div>
+    <div>
+      <label for="body">Body</label>
+      <textarea id="body" name="body" required>{{ post.body if post else '' }}</textarea>
+    </div>
+    <div>
+      <label for="image">Image (optional)</label>
+      {% if post and post.image_url %}
+        <img src="{{ post.image_url }}" alt="" class="current-image">
+        <p style="color:var(--text-muted); font-size:0.85rem; margin:0 0 8px;">Uploading a new image will replace this one.</p>
+      {% endif %}
+      <input type="file" id="image" name="image" accept=".png,.jpg,.jpeg,.gif,.webp">
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="is_published" name="is_published" {% if not post or post.is_published %}checked{% endif %}>
+      <label for="is_published" style="font-weight:600;">Published (visible on the public Updates page)</label>
+    </div>
+    <div>
+      <button type="submit" class="btn btn-primary">{{ 'Save Changes' if post else 'Create Post' }}</button>
+      <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary); margin-left:10px;">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

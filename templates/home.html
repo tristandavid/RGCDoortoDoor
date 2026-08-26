@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}RGC Door-to-Door Box Express Service to the Philippines{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <div class="container hero-inner hero-inner--split">
+    <div class="hero-media">
+      <div class="hero-media-frame">
+        <img src="{{ url_for('static', filename='images/hero-flyer.png') }}" alt="RGC Door-to-Door Box Express Services promo flyer">
+        <svg class="hero-route" viewBox="0 0 1890 1500" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+          <g class="hero-route-marker">
+            <circle r="16" fill="#ffb703" stroke="#ffffff" stroke-width="4"/>
+            <rect x="-8" y="-7" width="16" height="12" rx="2" fill="#3a2200"/>
+            <rect x="-8" y="-7" width="16" height="4" fill="#fff" opacity="0.55"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div class="hero-text">
+      <h1>RGC DOOR-TO-DOOR BOX EXPRESS SERVICE<br>to the <span>PHILIPPINES</span></h1>
+      <p class="lead">
+        On-Time. FAST. RELIABLE. SAFE. Shipping and delivery straight to your
+        Dabarkadz, Kapatid, Kapamilya, or Kapuso &mdash; wherever they are.
+      </p>
+      <div class="hero-ctas">
+        <a href="{{ url_for('rates') }}" class="btn">See Our Rates</a>
+        <a href="{{ url_for('book_a_pickup') }}" class="btn btn-outline">Book a Pick Up</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="promo-banner">
+  💰 DROP OFF YOUR BOX at OUR MOBILE WAREHOUSE and GET $10.00 DOLLARS OFF PER BOX
+</div>
+
+<section class="section">
+  <div class="container">
+    <div class="quick-track">
+      <h2 style="margin-top:0;">📦 Track Your Package</h2>
+      <p style="color:var(--text-muted); margin-bottom:22px;">Already shipped a box with us? Track below.</p>
+      <a href="{{ url_for('track') }}" class="btn">Track Your Package</a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <h2>We Deliver More Than Boxes</h2>
+      <p>
+        Every box we carry is packed with love, memories, and excitement for the
+        family waiting back home. RGC makes sure it gets there safely &mdash; door to door.
+      </p>
+    </div>
+    <div class="grid-3">
+      <div class="card">
+        <span class="icon">🚚</span>
+        <h3>Door-to-Door Delivery</h3>
+        <p>We pick up from your door in the Greater Toronto Area and deliver
+          directly to your family's door in the Philippines &mdash; no extra trips,
+          no hassle.</p>
+      </div>
+      <div class="card">
+        <span class="icon">✈️</span>
+        <h3>Weekly Air Cargo</h3>
+        <p>AIR Cargo Service is now available, with weekly shipments to the
+          Philippines for when you need your box to arrive faster.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🛡️</span>
+        <h3>Safe &amp; Reliable</h3>
+        <p>Your boxes are handled with care from pickup to delivery, so
+          everything arrives exactly the way you packed it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section section-alt">
+  <div class="container">
+    <div class="section-header">
+      <h2>Where We Deliver</h2>
+      <p>We proudly service the entire Philippines, including hard port and
+        super hard port areas that other couriers won't reach.</p>
+    </div>
+    <div class="areas-list">
+      {% for area in company.areas %}
+        <span class="area-pill">{{ area }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% if latest_posts %}
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <h2>Latest Updates</h2>
+      <p>News, promotions, and shipping updates from RGC.</p>
+    </div>
+    <div class="grid-3">
+      {% for post in latest_posts %}
+        <a href="{{ url_for('update_detail', post_id=post.id) }}" class="card" style="display:block;">
+          {% if post.image_url %}
+            <img src="{{ post.image_url }}" alt="" style="width:100%; border-radius:10px; margin-bottom:14px; max-height:160px; object-fit:cover;">
+          {% endif %}
+          <h3>{{ post.title }}</h3>
+          <p>{{ post.body[:120] }}{% if post.body|length > 120 %}&hellip;{% endif %}</p>
+        </a>
+      {% endfor %}
+    </div>
+    <div class="section-header" style="margin-top:36px;">
+      <a href="{{ url_for('updates') }}" class="btn btn-primary">See All Updates</a>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="container two-col-text">
+    <div>
+      <h2>Empty Boxes &amp; Packaging, Sorted</h2>
+      <p>
+        Need a box to start packing? We sell sturdy empty boxes and all the
+        packaging items you need &mdash; tape, labels, and more &mdash; so getting your
+        balikbayan box ready is one less thing to worry about.
+      </p>
+      <div class="hero-ctas" style="justify-content:flex-start;">
+        <a href="{{ url_for('empty_box_sales') }}" class="btn btn-primary">Empty Box Sales</a>
+        <a href="{{ url_for('packaging_items') }}" class="btn btn-outline" style="color:var(--primary); border-color: var(--primary);">Packaging Items</a>
+      </div>
+    </div>
+    <div class="card">
+      <span class="icon">📦</span>
+      <h3>Ready When You Are</h3>
+      <p>Mobile warehouse drop-off available &mdash; bring your packed box to us
+        and save $10.00 per box on your shipment.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section section-alt">
+  <div class="container two-col-text">
+    <div class="card">
+      <span class="icon">🍲</span>
+      <h3>Sari Sari by: Regueca</h3>
+      <p>Craving a taste of home? Check out Sari Sari by: Regueca for
+        Filipino favorites alongside your box shipment.</p>
+      <a href="{{ url_for('sari_sari') }}" class="btn btn-primary" style="margin-top:16px;">Visit Sari Sari</a>
+    </div>
+    <div>
+      <h2>One Stop for Home &amp; Heart</h2>
+      <p>
+        RGC is more than a shipping company &mdash; we're a bridge between
+        Filipino-Canadian families and the ones they love back home. From
+        boxes to bites, we keep you connected.
+      </p>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

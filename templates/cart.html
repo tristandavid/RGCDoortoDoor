@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Your Cart | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="container">
+    <h1>Your Cart</h1>
+    <p>Review your items before checking out</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container" style="max-width:820px;">
+    {% if items %}
+      <div class="table-scroll">
+<table class="admin-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Item</th>
+            <th>Price</th>
+            <th>Quantity</th>
+            <th>Subtotal</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+          <tr>
+            <td>
+              {% if item.product.image_url %}
+                <img src="{{ item.product.image_url }}" alt="{{ item.product.name }}" style="width:52px; height:52px; object-fit:cover; border-radius:8px; display:block;">
+              {% else %}
+                <span style="display:flex; align-items:center; justify-content:center; width:52px; height:52px; border-radius:8px; background:var(--bg-alt); font-size:1.4rem;">📦</span>
+              {% endif %}
+            </td>
+            <td>{{ item.product.name }}</td>
+            <td>${{ "%.2f"|format(item.product.price) }}</td>
+            <td>
+              <form class="cart-qty-form" method="post" action="{{ url_for('cart_update', product_id=item.product.id) }}">
+                <input type="number" name="quantity" value="{{ item.quantity }}" min="1" max="99" aria-label="Quantity">
+                <button type="submit" class="btn btn-small btn-outline" style="color:var(--primary); border-color:var(--primary);">Update</button>
+              </form>
+            </td>
+            <td>${{ "%.2f"|format(item.subtotal) }}</td>
+            <td>
+              <form method="post" action="{{ url_for('cart_remove', product_id=item.product.id) }}">
+                <button type="submit" class="btn btn-small btn-danger">Remove</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+</div>
+
+      <div style="text-align:right; margin-top:20px; max-width:320px; margin-left:auto;">
+        <div style="display:flex; justify-content:space-between; color:var(--text-muted);">
+          <span>Subtotal</span><span>${{ "%.2f"|format(subtotal) }}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; color:var(--text-muted); margin-top:4px;">
+          <span>HST (13%)</span><span>${{ "%.2f"|format(tax) }}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:1.2rem; font-weight:800; color:var(--primary-dark); margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+          <span>Total</span><span>${{ "%.2f"|format(total) }} CAD</span>
+        </div>
+      </div>
+      <div style="text-align:right; margin-top:16px;">
+        <a href="{{ url_for('checkout') }}" class="btn btn-primary">Proceed to Checkout</a>
+      </div>
+    {% else %}
+      <p>Your cart is empty. Browse our <a href="{{ url_for('packaging_items') }}">Packaging Items</a>
+        or <a href="{{ url_for('empty_box_sales') }}">Empty Box Sales</a>.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

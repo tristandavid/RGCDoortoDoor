@@ -1,0 +1,62 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Site Settings | {{ company.name }}{% endblock %}
+{% block page_title %}Site Settings{% endblock %}
+{% block page_subtitle %}<p>Manage site-wide options like the browser tab icon and social links</p>{% endblock %}
+{% block admin_content %}
+
+<div class="grid-2">
+  <div class="admin-card">
+    <h3 style="margin-top:0;">Website Icon (Favicon)</h3>
+    <p style="color:var(--text-muted);">
+      This is the small icon shown in the browser tab. Upload a square
+      image (PNG, JPG, SVG, or ICO work best — 512&times;512px or so).
+    </p>
+
+    {% if favicon_url %}
+      <div style="display:flex; align-items:center; gap:16px; margin:20px 0;">
+        <img src="{{ favicon_url }}" alt="Current site icon" style="width:64px; height:64px; border-radius:10px; border:1px solid var(--border); object-fit:cover;">
+        <div>
+          <p style="margin:0 0 4px; font-weight:700;">Current icon</p>
+          <form method="post" action="{{ url_for('admin_settings_remove_favicon') }}" onsubmit="return confirm('Remove the custom icon and go back to the default?');">
+            <button type="submit" class="btn btn-small btn-danger">Remove &amp; use default</button>
+          </form>
+        </div>
+      </div>
+    {% else %}
+      <p style="color:var(--text-muted);">No custom icon set yet &mdash; the site is using its default icon.</p>
+    {% endif %}
+
+    <form class="admin-form" method="post" enctype="multipart/form-data" style="margin-top:20px;">
+      <div>
+        <label for="favicon">Upload New Icon</label>
+        <input type="file" id="favicon" name="favicon" accept=".png,.jpg,.jpeg,.svg,.ico" required>
+      </div>
+      <div>
+        <button type="submit" class="btn btn-primary">Upload</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="admin-card">
+    <h3 style="margin-top:0;">Social Media Links</h3>
+    <p style="color:var(--text-muted);">
+      Paste the links to your social media pages below. Icons for a
+      platform only appear in the site footer once a link is set here
+      &mdash; leave a field blank to hide that icon.
+    </p>
+
+    <form class="admin-form" method="post" action="{{ url_for('admin_settings_social') }}" style="margin-top:20px;">
+      {% for key, label in social_platforms %}
+        <div>
+          <label for="{{ key }}">{{ label }}</label>
+          <input type="url" id="{{ key }}" name="{{ key }}" placeholder="https://..." value="{{ social_links.get(key) or '' }}">
+        </div>
+      {% endfor %}
+      <div>
+        <button type="submit" class="btn btn-primary">Save Links</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

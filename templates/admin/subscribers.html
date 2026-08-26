@@ -1,0 +1,49 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Subscribers | {{ company.name }}{% endblock %}
+{% block page_title %}Subscribers{% endblock %}
+{% block page_subtitle %}<p>Everyone who's signed up via the footer's "Subscribe" form</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <div class="admin-actions" style="margin-bottom:16px;">
+    <a href="{{ url_for('admin_subscribers_export') }}" class="btn btn-primary">⬇ Export CSV</a>
+  </div>
+
+  {% if not subscribers %}
+    <p style="color:var(--text-muted);">No subscribers yet.</p>
+  {% else %}
+    <p style="color:var(--text-muted); margin-bottom:16px;">{{ subscribers|length }} subscriber{{ 's' if subscribers|length != 1 }}</p>
+    <div class="table-scroll">
+<table class="admin-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Address</th>
+          <th>Phone</th>
+          <th>Subscribed</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for subscriber in subscribers %}
+        <tr>
+          <td>{{ subscriber.name or '—' }}</td>
+          <td>{{ subscriber.email }}</td>
+          <td>{{ subscriber.address or '—' }}</td>
+          <td>{{ subscriber.phone or '—' }}</td>
+          <td>{{ subscriber.created_at.strftime('%b %d, %Y') }}</td>
+          <td>
+            <form method="post" action="{{ url_for('admin_subscriber_delete', subscriber_id=subscriber.id) }}" onsubmit="return confirm('Remove this subscriber?');" style="display:inline;">
+              <button type="submit" class="btn btn-small btn-danger">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+</div>
+  {% endif %}
+</div>
+
+{% endblock %}

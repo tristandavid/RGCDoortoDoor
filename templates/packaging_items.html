@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Packaging Items | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="container">
+    <h1>Packaging Items</h1>
+    <p>Everything you need to pack your box safely and securely</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container">
+    {% if products %}
+      {% include "_product_grid.html" %}
+    {% else %}
+      <div class="grid-3">
+        <div class="card">
+          <span class="icon">🎗️</span>
+          <h3>Packing Tape</h3>
+          <p>Heavy-duty tape to keep your box sealed tight for the whole
+            journey.</p>
+        </div>
+        <div class="card">
+          <span class="icon">🏷️</span>
+          <h3>Shipping Labels</h3>
+          <p>Clear, durable labels so your box gets to the right door, every
+            time.</p>
+        </div>
+        <div class="card">
+          <span class="icon">🧵</span>
+          <h3>Straps &amp; Twine</h3>
+          <p>Extra reinforcement for heavier or bulkier boxes.</p>
+        </div>
+        <div class="card">
+          <span class="icon">🧻</span>
+          <h3>Wrapping Materials</h3>
+          <p>Bubble wrap and packing paper to keep fragile items protected.</p>
+        </div>
+        <div class="card">
+          <span class="icon">📝</span>
+          <h3>Customs Forms</h3>
+          <p>We'll help you fill out the paperwork needed for a smooth
+            delivery.</p>
+        </div>
+        <div class="card">
+          <span class="icon">🛍️</span>
+          <h3>Packing Bags</h3>
+          <p>Sturdy bags to help organize and separate items inside your box.</p>
+        </div>
+      </div>
+    {% endif %}
+    <div class="section-header" style="margin-top:48px;">
+      <p>Not sure what you need? Bring your items to our mobile warehouse and
+        we'll help you pack it right.</p>
+      <a href="{{ url_for('contact_us') }}" class="btn btn-primary">Contact Us</a>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
