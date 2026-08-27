@@ -24,6 +24,12 @@
       <div class="topbar-actions">
         <a href="{{ url_for('contact_us') }}" class="topbar-admin-link">✉ Contact Us</a>
         <a href="{{ url_for('book_a_pickup') }}" class="topbar-book-link">📅 Book a Pick Up</a>
+        {% if current_customer %}
+          <a href="{{ url_for('customer_portal') }}" class="topbar-admin-link">👤 My Account</a>
+          <a href="{{ url_for('customer_logout') }}" class="topbar-admin-link">Sign Out</a>
+        {% else %}
+          <a href="{{ url_for('customer_login') }}" class="topbar-admin-link">🔑 Customer Login</a>
+        {% endif %}
         {% if session.get('is_admin') %}
           <a href="{{ url_for('admin_dashboard') }}" class="topbar-admin-link">🔐 Admin Panel</a>
         {% endif %}

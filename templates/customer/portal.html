@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}My Account | {{ company.name }}{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:2rem;">
+      <div>
+        <h2 style="margin:0;">Welcome, {{ user.name }}</h2>
+        <p style="margin:.25rem 0 0; color:var(--text-muted);">
+          {{ user.email }} &nbsp;·&nbsp;
+          <span class="badge {% if user.role == 'admin' %}badge-published{% elif user.role == 'staff' %}badge-status{% else %}badge-pending{% endif %}">
+            {{ user.role_label }}
+          </span>
+        </p>
+      </div>
+      <a href="{{ url_for('customer_logout') }}" class="btn btn-outline">Sign Out</a>
+    </div>
+
+    {# Orders Section #}
+    <div class="admin-card" style="margin-bottom:2rem;">
+      <h3 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:.75rem;">📦 My Orders</h3>
+      {% if orders %}
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Order #</th>
+                <th>Date</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for order in orders %}
+              <tr>
+                <td><strong>{{ order.order_number }}</strong></td>
+                <td>{{ order.created_at.strftime('%b %d, %Y') }}</td>
+                <td>{{ order.items|length }} item{% if order.items|length != 1 %}s{% endif %}</td>
+                <td>${{ "%.2f"|format(order.total) }}</td>
+                <td><span class="badge {{ order.status_badge_class }}">{{ order.status }}</span></td>
+                <td>
+                  <a href="{{ url_for('order_confirmation', order_number=order.order_number) }}" class="btn btn-sm btn-outline">View</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p style="color:var(--text-muted); margin:0;">No orders yet. <a href="{{ url_for('empty_box_sales') }}">Shop now →</a></p>
+      {% endif %}
+    </div>
+
+    {# Pickups Section #}
+    <div class="admin-card" style="margin-bottom:2rem;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+        <h3 style="margin:0;">📅 My Pickup Requests</h3>
+        <a href="{{ url_for('book_a_pickup') }}" class="btn btn-sm btn-primary">+ Book a Pickup</a>
+      </div>
+      {% if pickups %}
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Address</th>
+                <th>Time</th>
+                <th>Boxes</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in pickups %}
+              <tr>
+                <td>{{ p.pickup_date.strftime('%b %d, %Y') }}</td>
+                <td>{{ p.address }}</td>
+                <td>{{ p.time_window }}</td>
+                <td>{{ p.box_count or '—' }}</td>
+                <td><span class="badge {{ p.status_badge_class }}">{{ p.status }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p style="color:var(--text-muted); margin:0;">No pickup requests yet. <a href="{{ url_for('book_a_pickup') }}">Book one →</a></p>
+      {% endif %}
+    </div>
+
+    {# Quick Links #}
+    <div class="admin-card">
+      <h3 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:.75rem;">Quick Links</h3>
+      <div style="display:flex; flex-wrap:wrap; gap:.75rem;">
+        <a href="{{ url_for('track') }}" class="btn btn-outline">📦 Track a Package</a>
+        <a href="{{ url_for('rates') }}" class="btn btn-outline">📋 View Rates</a>
+        <a href="{{ url_for('contact_us') }}" class="btn btn-outline">✉ Contact Us</a>
+        <a href="{{ url_for('empty_box_sales') }}" class="btn btn-outline">🛍 Shop Boxes</a>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+{% endblock %}

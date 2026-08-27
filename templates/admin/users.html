@@ -1,0 +1,63 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Users | Admin{% endblock %}
+{% block page_title %}User Accounts{% endblock %}
+{% block page_subtitle %}<p class="admin-subtitle">Manage customer, staff, and admin accounts for the customer portal.</p>{% endblock %}
+
+{% block admin_content %}
+
+<div style="display:flex; justify-content:flex-end; margin-bottom:1.25rem;">
+  <a href="{{ url_for('admin_user_new') }}" class="btn btn-primary">+ New Account</a>
+</div>
+
+{% if users %}
+<div class="table-wrap">
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td><strong>{{ user.name }}</strong></td>
+        <td>{{ user.email }}</td>
+        <td>
+          <span class="badge {% if user.role == 'admin' %}badge-published{% elif user.role == 'staff' %}badge-status{% else %}badge-pending{% endif %}">
+            {{ user.role_label }}
+          </span>
+        </td>
+        <td>
+          {% if user.is_active %}
+            <span class="badge badge-delivered">Active</span>
+          {% else %}
+            <span class="badge badge-delayed">Inactive</span>
+          {% endif %}
+        </td>
+        <td>{{ user.created_at.strftime('%b %d, %Y') }}</td>
+        <td style="white-space:nowrap;">
+          <a href="{{ url_for('admin_user_edit', user_id=user.id) }}" class="btn btn-sm btn-outline">Edit</a>
+          <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}"
+                style="display:inline;"
+                onsubmit="return confirm('Delete account for {{ user.name }}? This cannot be undone.')">
+            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="admin-empty">
+    <p>No user accounts yet.</p>
+    <a href="{{ url_for('admin_user_new') }}" class="btn btn-primary">Create the first account</a>
+  </div>
+{% endif %}
+
+{% endblock %}

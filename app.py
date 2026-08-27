@@ -664,6 +664,8 @@ ADMIN_SECTIONS = [
      {"admin_invoices", "admin_invoice_new", "admin_invoice_detail"}),
     ("📅", "Pickups", "admin_pickups", {"admin_pickups"}),
     ("📧", "Subscribers", "admin_subscribers", {"admin_subscribers"}),
+    ("👥", "Users", "admin_users",
+     {"admin_users", "admin_user_new", "admin_user_edit"}),
     ("🛍️", "Products", "admin_products",
      {"admin_products", "admin_product_new", "admin_product_edit"}),
     ("📄", "Pages", "admin_pages", {"admin_pages", "admin_page_edit"}),
@@ -677,7 +679,7 @@ ADMIN_SECTIONS = [
 # financial data). Kept as a lookup by section label rather than a 5th
 # ADMIN_SECTIONS tuple field so _admin_base.html's plain 4-item unpacking
 # doesn't need to change.
-OWNER_ONLY_ADMIN_SECTIONS = {"Mailbox", "Orders", "Invoices", "Pickups", "Subscribers"}
+OWNER_ONLY_ADMIN_SECTIONS = {"Mailbox", "Orders", "Invoices", "Pickups", "Subscribers", "Users"}
 
 
 @app.context_processor
@@ -705,6 +707,11 @@ def inject_globals():
         section for section in ADMIN_SECTIONS
         if is_owner_account or section[1] not in OWNER_ONLY_ADMIN_SECTIONS
     ]
+    # Customer portal user (separate from the admin session above)
+    customer_user_id = session.get("customer_user_id")
+    current_customer = (
+        CustomerUser.query.get(customer_user_id) if customer_user_id else None
+    )
     return {
         "company": company,
         "favicon_url": favicon_url,
@@ -717,6 +724,7 @@ def inject_globals():
         "is_owner_account": is_owner_account,
         "admin_sections": visible_admin_sections if is_admin_logged_in else ADMIN_SECTIONS,
         "admin_section": admin_section,
+        "current_customer": current_customer,
     }
 
 
@@ -1032,6 +1040,63 @@ class Subscriber(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
+# ---------------------------------------------------------------------------
+# Customer / Staff user accounts
+# ---------------------------------------------------------------------------
+
+CUSTOMER_USER_ROLES = ["customer", "staff", "admin"]
+
+# Pages customers can access when logged in as a customer.
+# Staff and admin can see everything. Customers only see these endpoints.
+CUSTOMER_ALLOWED_ENDPOINTS = {
+    "home", "about_us", "contact_us", "rates", "updates", "update_detail",
+    "track", "sari_sari", "empty_box_sales", "packaging_items",
+    "cart_view", "cart_add", "cart_update", "cart_remove",
+    "checkout", "order_confirmation", "order_confirmation_invoice",
+    "book_a_pickup", "privacy_policy", "terms_and_conditions",
+    "newsletter_signup", "healthz",
+    # customer portal endpoints
+    "customer_portal", "customer_logout", "customer_login",
+    # static files, etc.
+    "static",
+}
+
+
+class CustomerUser(db.Model):
+    """A site-registered user account (customer, staff, or admin role).
+
+    Separate from the env-var admin credentials (ADMIN_USERNAME/ADMIN_PASSWORD)
+    — those are the back-office owner/creator logins that manage the admin
+    panel. CustomerUser accounts are for the public-facing portal: customers
+    can track their orders and view their purchase history; staff can also
+    see the admin panel; admin role gets full admin access.
+
+    Passwords are stored as a SHA-256 hex digest (same simple approach used
+    for MFA backup codes elsewhere). For a larger deployment you'd use
+    bcrypt/argon2, but this matches the existing pattern.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(320), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    password_hash = db.Column(db.String(64), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default="customer")
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def set_password(self, password):
+        self.password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+    def check_password(self, password):
+        return secrets.compare_digest(
+            self.password_hash,
+            hashlib.sha256(password.encode()).hexdigest(),
+        )
+
+    @property
+    def role_label(self):
+        return {"customer": "Customer", "staff": "Staff", "admin": "Admin"}.get(self.role, self.role.title())
+
+
 # Starting copy for the editable pages below — seeded once into the
 # database on first run so nothing visually changes until the owner
 # actually edits a page from /admin/pages. Plain text: blank lines start a
@@ -1153,6 +1218,8 @@ with app.app_context():
     _ensure_column("subscriber", "phone", "VARCHAR(50)")
     _ensure_column("manual_invoice", "customer_phone", "VARCHAR(50)")
     _ensure_column("manual_invoice", "tax_override", "NUMERIC(10, 2)")
+    # CustomerUser columns (safe if table already existed without them)
+    _ensure_column("customer_user", "is_active", "BOOLEAN DEFAULT TRUE")
     for slug, (label, body) in DEFAULT_PAGE_CONTENT.items():
         if not PageContent.query.get(slug):
             db.session.add(PageContent(slug=slug, label=label, body=body))
@@ -1491,6 +1558,51 @@ def api_owner_required(view):
             return jsonify(error="This account doesn't have access to that."), 403
         return view(*args, **kwargs)
     return wrapped
+
+
+def customer_login_required(view):
+    """Requires any logged-in customer/staff/admin user (via the customer
+    portal session). Staff/admin users are always allowed through. Customer
+    users are checked against CUSTOMER_ALLOWED_ENDPOINTS for the current route.
+    """
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        user_id = session.get("customer_user_id")
+        if not user_id:
+            flash("Please log in to continue.", "error")
+            return redirect(url_for("customer_login", next=request.path))
+        user = CustomerUser.query.get(user_id)
+        if not user or not user.is_active:
+            session.pop("customer_user_id", None)
+            flash("Your account is inactive. Please contact us.", "error")
+            return redirect(url_for("customer_login"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+@app.before_request
+def enforce_customer_page_restrictions():
+    """If a customer-role user (not staff/admin) tries to access a page
+    outside CUSTOMER_ALLOWED_ENDPOINTS, redirect them to their portal.
+    This runs on every request so there's no way to slip through via a
+    direct URL.
+    """
+    user_id = session.get("customer_user_id")
+    if not user_id:
+        return  # not logged in as a customer user — no restriction
+    # Don't enforce on static assets or the admin backend (admin has its
+    # own separate session check)
+    endpoint = request.endpoint
+    if not endpoint or endpoint == "static":
+        return
+    user = CustomerUser.query.get(user_id)
+    if not user or not user.is_active:
+        return
+    if user.role == "customer" and endpoint not in CUSTOMER_ALLOWED_ENDPOINTS:
+        flash("You don't have permission to view that page.", "error")
+        return redirect(url_for("customer_portal"))
+    # Staff/admin roles have no page restriction on the public site.
+    # (Admin panel access is controlled separately by the admin session.)
 
 
 # ---------------------------------------------------------------------------
@@ -3254,6 +3366,134 @@ def api_subscriber_delete(subscriber_id):
     db.session.delete(subscriber)
     db.session.commit()
     return jsonify(ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Customer / Staff portal routes
+# ---------------------------------------------------------------------------
+
+@app.route("/customer/login", methods=["GET", "POST"])
+def customer_login():
+    if session.get("customer_user_id"):
+        return redirect(url_for("customer_portal"))
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        user = CustomerUser.query.filter_by(email=email).first()
+        if user and user.is_active and user.check_password(password):
+            session["customer_user_id"] = user.id
+            session["customer_user_role"] = user.role
+            flash(f"Welcome back, {user.name}!", "success")
+            next_url = request.args.get("next")
+            # Only allow safe same-site redirects
+            if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+                return redirect(next_url)
+            return redirect(url_for("customer_portal"))
+        flash("Incorrect email or password.", "error")
+    return render_template("customer/login.html")
+
+
+@app.route("/customer/logout")
+def customer_logout():
+    session.pop("customer_user_id", None)
+    session.pop("customer_user_role", None)
+    flash("You've been logged out.", "success")
+    return redirect(url_for("home"))
+
+
+@app.route("/customer/portal")
+@customer_login_required
+def customer_portal():
+    user = CustomerUser.query.get(session["customer_user_id"])
+    # Show the customer their own orders (matched by email)
+    orders = Order.query.filter_by(customer_email=user.email).order_by(
+        Order.created_at.desc()
+    ).limit(20).all()
+    # Show their pickup requests (matched by email)
+    pickups = PickupRequest.query.filter_by(email=user.email).order_by(
+        PickupRequest.created_at.desc()
+    ).limit(10).all()
+    return render_template("customer/portal.html", user=user, orders=orders, pickups=pickups)
+
+
+# ---------------------------------------------------------------------------
+# Admin routes: customer/staff user management
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/users")
+@login_required
+@owner_required
+def admin_users():
+    users = CustomerUser.query.order_by(CustomerUser.created_at.desc()).all()
+    return render_template("admin/users.html", users=users, roles=CUSTOMER_USER_ROLES)
+
+
+@app.route("/admin/users/new", methods=["GET", "POST"])
+@login_required
+@owner_required
+def admin_user_new():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        name = request.form.get("name", "").strip()
+        password = request.form.get("password", "")
+        role = request.form.get("role", "customer")
+        if not email or not name or not password:
+            flash("Email, name, and password are required.", "error")
+        elif role not in CUSTOMER_USER_ROLES:
+            flash("Invalid role.", "error")
+        elif CustomerUser.query.filter_by(email=email).first():
+            flash("An account with that email already exists.", "error")
+        else:
+            user = CustomerUser(email=email, name=name, role=role)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            flash(f"Account created for {name}.", "success")
+            return redirect(url_for("admin_users"))
+    return render_template("admin/user_form.html", user=None, roles=CUSTOMER_USER_ROLES)
+
+
+@app.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])
+@login_required
+@owner_required
+def admin_user_edit(user_id):
+    user = CustomerUser.query.get_or_404(user_id)
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        role = request.form.get("role", "customer")
+        is_active = request.form.get("is_active") == "1"
+        new_password = request.form.get("password", "").strip()
+        if not email or not name:
+            flash("Email and name are required.", "error")
+        elif role not in CUSTOMER_USER_ROLES:
+            flash("Invalid role.", "error")
+        else:
+            conflict = CustomerUser.query.filter_by(email=email).first()
+            if conflict and conflict.id != user_id:
+                flash("Another account already uses that email.", "error")
+            else:
+                user.name = name
+                user.email = email
+                user.role = role
+                user.is_active = is_active
+                if new_password:
+                    user.set_password(new_password)
+                db.session.commit()
+                flash("Account updated.", "success")
+                return redirect(url_for("admin_users"))
+    return render_template("admin/user_form.html", user=user, roles=CUSTOMER_USER_ROLES)
+
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@login_required
+@owner_required
+def admin_user_delete(user_id):
+    user = CustomerUser.query.get_or_404(user_id)
+    db.session.delete(user)
+    db.session.commit()
+    flash(f"Account for {user.name} deleted.", "success")
+    return redirect(url_for("admin_users"))
 
 
 @app.errorhandler(404)

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Customer Login | {{ company.name }}{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container">
+    <div class="login-box">
+      <h2 style="margin-top:0;">Customer Login</h2>
+      <p style="color:var(--text-muted);">Sign in to track your orders, view your history, and manage your pickups.</p>
+      <form method="post" class="admin-form">
+        <div>
+          <label for="email">Email Address</label>
+          <input type="email" id="email" name="email" required autofocus autocomplete="email"
+                 value="{{ request.form.get('email', '') }}">
+        </div>
+        <div>
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;">Sign In</button>
+      </form>
+      <p style="margin-top:1.25rem; text-align:center; color:var(--text-muted); font-size:.9rem;">
+        Don't have an account? <a href="{{ url_for('contact_us') }}">Contact us</a> to get set up.
+      </p>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
