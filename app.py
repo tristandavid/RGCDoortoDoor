@@ -6,12 +6,15 @@ import os
 import secrets
 import smtplib
 import string
+import subprocess
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import zipfile
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from email.message import EmailMessage
@@ -3089,6 +3092,182 @@ def admin_settings_mfa_disable():
     set_setting(_mfa_setting_key("mfa_totp_secret_pending", identity), None)
     set_setting(_mfa_setting_key("mfa_backup_codes", identity), None)
     flash("Two-factor authentication is off.", "success")
+    return redirect(url_for("admin_settings"))
+
+
+# ---------------------------------------------------------------------------
+# Backup / Restore
+# ---------------------------------------------------------------------------
+# Two independent backup types:
+#   - Database backup: a JSON export of every table row — portable across
+#     Postgres and SQLite, and safe to import on a fresh install.
+#   - Files backup: a ZIP of static/uploads/ and static/branding/ — the
+#     product images, the favicon, and any other uploaded assets.
+#
+# Restore works the same way in reverse: upload the file that was downloaded,
+# and the server applies it. Database restore is additive for Settings (merges
+# by key) and replaces rows for everything else to avoid duplicates.
+# ---------------------------------------------------------------------------
+
+def _db_export_json():
+    """Serialize every table to a plain Python dict tree, return as JSON bytes."""
+    from sqlalchemy import inspect as sa_inspect
+    inspector = sa_inspect(db.engine)
+    table_names = inspector.get_table_names()
+    dump = {}
+    with db.engine.connect() as conn:
+        for table in table_names:
+            rows = conn.execute(text(f'SELECT * FROM "{table}"')).mappings().all()
+            dump[table] = [dict(r) for r in rows]
+    # datetime objects aren't JSON-serialisable by default
+    def _serial(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        raise TypeError(f"Type {type(obj)} not serialisable")
+    return json.dumps(dump, default=_serial, indent=2).encode("utf-8")
+
+
+def _db_import_json(data_bytes):
+    """Import a JSON database dump.  Settings are upserted; all other tables
+    are truncated then re-inserted so restoring is idempotent."""
+    dump = json.loads(data_bytes.decode("utf-8"))
+    with db.engine.begin() as conn:
+        for table, rows in dump.items():
+            if not rows:
+                continue
+            if table == "setting":
+                # Upsert: keep any keys that weren't in the backup as-is
+                for row in rows:
+                    existing = conn.execute(
+                        text(f'SELECT 1 FROM "{table}" WHERE key = :k'),
+                        {"k": row["key"]},
+                    ).fetchone()
+                    if existing:
+                        conn.execute(
+                            text(f'UPDATE "{table}" SET value = :v WHERE key = :k'),
+                            {"v": row["value"], "k": row["key"]},
+                        )
+                    else:
+                        cols = ", ".join(f'"{c}"' for c in row)
+                        placeholders = ", ".join(f":{c}" for c in row)
+                        conn.execute(
+                            text(f'INSERT INTO "{table}" ({cols}) VALUES ({placeholders})'),
+                            row,
+                        )
+            else:
+                # Truncate then bulk-insert
+                conn.execute(text(f'DELETE FROM "{table}"'))
+                for row in rows:
+                    cols = ", ".join(f'"{c}"' for c in row)
+                    placeholders = ", ".join(f":{c}" for c in row)
+                    conn.execute(
+                        text(f'INSERT INTO "{table}" ({cols}) VALUES ({placeholders})'),
+                        row,
+                    )
+
+
+@app.route("/admin/settings/backup/database")
+@login_required
+def admin_backup_database():
+    """Download a JSON snapshot of the entire database."""
+    try:
+        payload = _db_export_json()
+    except Exception as exc:
+        flash(f"Database backup failed: {exc}", "error")
+        return redirect(url_for("admin_settings"))
+    stamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    return Response(
+        payload,
+        mimetype="application/json",
+        headers={
+            "Content-Disposition": f"attachment; filename=rgc-db-backup-{stamp}.json",
+            "Content-Length": len(payload),
+        },
+    )
+
+
+@app.route("/admin/settings/backup/files")
+@login_required
+def admin_backup_files():
+    """Download a ZIP of all uploaded static files (uploads + branding)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for subfolder in ("uploads", "branding"):
+            folder_path = os.path.join(app.static_folder, subfolder)
+            if not os.path.isdir(folder_path):
+                continue
+            for root, _dirs, files in os.walk(folder_path):
+                for fname in files:
+                    abs_path = os.path.join(root, fname)
+                    arc_name = os.path.relpath(abs_path, app.static_folder)
+                    zf.write(abs_path, arc_name)
+    buf.seek(0)
+    payload = buf.read()
+    stamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    return Response(
+        payload,
+        mimetype="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename=rgc-files-backup-{stamp}.zip",
+            "Content-Length": len(payload),
+        },
+    )
+
+
+@app.route("/admin/settings/restore/database", methods=["POST"])
+@login_required
+def admin_restore_database():
+    """Restore the database from a previously downloaded JSON backup."""
+    uploaded = request.files.get("db_backup")
+    if not uploaded or not uploaded.filename:
+        flash("Please choose a JSON backup file to upload.", "error")
+        return redirect(url_for("admin_settings"))
+    if not uploaded.filename.lower().endswith(".json"):
+        flash("Database restore expects a .json file (downloaded from Database Backup).", "error")
+        return redirect(url_for("admin_settings"))
+    data = uploaded.read()
+    try:
+        _db_import_json(data)
+    except Exception as exc:
+        flash(f"Database restore failed: {exc}", "error")
+        return redirect(url_for("admin_settings"))
+    flash(
+        "Database restored successfully. If settings look wrong, reload the page.",
+        "success",
+    )
+    return redirect(url_for("admin_settings"))
+
+
+@app.route("/admin/settings/restore/files", methods=["POST"])
+@login_required
+def admin_restore_files():
+    """Restore uploaded files from a previously downloaded ZIP backup."""
+    uploaded = request.files.get("files_backup")
+    if not uploaded or not uploaded.filename:
+        flash("Please choose a ZIP backup file to upload.", "error")
+        return redirect(url_for("admin_settings"))
+    if not uploaded.filename.lower().endswith(".zip"):
+        flash("Files restore expects a .zip file (downloaded from Files Backup).", "error")
+        return redirect(url_for("admin_settings"))
+    data = uploaded.read()
+    try:
+        buf = io.BytesIO(data)
+        with zipfile.ZipFile(buf, "r") as zf:
+            for member in zf.namelist():
+                # Only allow uploads/ and branding/ paths — no path traversal
+                norm = os.path.normpath(member)
+                if norm.startswith("..") or (
+                    not norm.startswith("uploads") and not norm.startswith("branding")
+                ):
+                    continue
+                dest = os.path.join(app.static_folder, norm)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                with zf.open(member) as src, open(dest, "wb") as dst:
+                    dst.write(src.read())
+    except Exception as exc:
+        flash(f"Files restore failed: {exc}", "error")
+        return redirect(url_for("admin_settings"))
+    flash("Files restored successfully.", "success")
     return redirect(url_for("admin_settings"))
 
 
