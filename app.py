@@ -1406,6 +1406,7 @@ CUSTOMER_USER_ROLES = ["customer"]
 CUSTOMER_ALWAYS_ALLOWED_ENDPOINTS = {
     "home", "cart_view", "cart_add", "cart_update", "cart_remove",
     "checkout", "order_confirmation", "order_confirmation_invoice",
+    "order_invoice",  # /order-confirmation/<number>/invoice.pdf
     "privacy_policy", "terms_and_conditions", "newsletter_signup", "healthz",
     # customer portal / auth endpoints
     "customer_portal", "customer_logout", "customer_login", "customer_register",
@@ -4543,10 +4544,12 @@ def customer_pickup_invoice(pickup_id):
     if not session_email or session_email != pickup_email:
         abort(403)
     if not pickup.invoice_filename:
-        abort(404)
+        flash("No invoice has been uploaded for this pickup yet. Please contact us if you need one.", "error")
+        return redirect(url_for("customer_portal", tab="pickups"))
     file_path = os.path.join(app.static_folder, pickup.invoice_filename)
     if not os.path.isfile(file_path):
-        abort(404)
+        flash("The invoice file could not be found. It may have been lost during a server restore — please contact us and we'll re-upload it.", "error")
+        return redirect(url_for("customer_portal", tab="pickups"))
     # Derive a tidy download filename: RGC-Invoice-<date>.pdf (or whatever ext)
     ext = pickup.invoice_filename.rsplit(".", 1)[-1].lower()
     date_str = pickup.pickup_date.strftime("%Y%m%d") if pickup.pickup_date else "invoice"
