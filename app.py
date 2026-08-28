@@ -3119,10 +3119,13 @@ def _db_export_json():
         for table in table_names:
             rows = conn.execute(text(f'SELECT * FROM "{table}"')).mappings().all()
             dump[table] = [dict(r) for r in rows]
-    # datetime objects aren't JSON-serialisable by default
+    # datetime/date/Decimal objects aren't JSON-serialisable by default
+    import datetime as dt
     def _serial(obj):
-        if isinstance(obj, datetime):
+        if isinstance(obj, (dt.datetime, dt.date)):
             return obj.isoformat()
+        if isinstance(obj, Decimal):
+            return str(obj)
         raise TypeError(f"Type {type(obj)} not serialisable")
     return json.dumps(dump, default=_serial, indent=2).encode("utf-8")
 
