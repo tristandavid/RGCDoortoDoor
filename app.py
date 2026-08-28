@@ -28,6 +28,7 @@ from flask import (
 )
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
@@ -1707,6 +1708,56 @@ def set_setting(key, value):
     db.session.commit()
 
 
+def _reset_pg_sequence(table_name):
+    """Reset a single Postgres table's id sequence to MAX(id)+1. No-op (and
+    safe to call) on SQLite, and safe to call on a table with no such
+    sequence (e.g. a string primary key)."""
+    if db.engine.dialect.name != "postgresql":
+        return
+    try:
+        with db.engine.begin() as conn:
+            conn.execute(text(
+                f'SELECT setval('
+                f"pg_get_serial_sequence('\"{table_name}\"', 'id'), "
+                f'COALESCE((SELECT MAX(id) FROM "{table_name}"), 0) + 1, false)'
+            ))
+    except Exception:
+        pass
+
+
+def commit_with_sequence_repair(build_fn, table_names):
+    """Calls build_fn() (which should db.session.add() one or more new rows
+    and return them) and commits. If the commit fails with a duplicate
+    primary key, this is almost always a stale Postgres id sequence left
+    over from a JSON database restore (see _db_import_json / the Settings
+    page's "Fix Database Sequences" button) — restoring inserts rows with
+    explicit ids, but Postgres's own auto-increment counter for that table
+    doesn't know that happened, so the very next ORM insert can collide
+    with an id that already exists. Rather than making every fresh booking
+    or order depend on the admin remembering to click that button first,
+    this repairs the affected table(s)' sequence(s) automatically and
+    retries once. `table_names` should list every table build_fn() inserts
+    into (e.g. ["pickup_request", "mailbox_message"]).
+
+    Raises IntegrityError if the retry also fails (a real data problem,
+    not a sequence one) or if this isn't Postgres.
+    """
+    try:
+        result = build_fn()
+        db.session.commit()
+        return result
+    except IntegrityError:
+        db.session.rollback()
+        if db.engine.dialect.name != "postgresql":
+            raise
+        for table_name in table_names:
+            _reset_pg_sequence(table_name)
+        # Retry once, now that the sequence(s) are corrected.
+        result = build_fn()
+        db.session.commit()
+        return result
+
+
 # --- Two-factor authentication (TOTP) helpers --------------------------------
 # See the big comment above ADMIN_USERNAME for how this state is stored in
 # Setting (namespaced per `identity` -- "owner" or "creator") and how to
@@ -2147,37 +2198,42 @@ def book_a_pickup():
                 "book_a_pickup.html", time_windows=PICKUP_TIME_WINDOWS, form=request.form, prefill=prefill,
             )
 
-        pickup = PickupRequest(
-            name=name, email=email, phone=phone, address=address,
-            pickup_date=pickup_date, time_window=time_window,
-            box_count=box_count, notes=notes or None,
+        def _create_pickup_and_mailbox_entry():
+            pickup = PickupRequest(
+                name=name, email=email, phone=phone, address=address,
+                pickup_date=pickup_date, time_window=time_window,
+                box_count=box_count, notes=notes or None,
+            )
+            db.session.add(pickup)
+            db.session.flush()  # get pickup.id before referencing it below, if ever needed
+            # Mirror into the admin Mailbox too, same reasoning as the contact
+            # form: this IS an email to CONTACT_RECIPIENT_EMAIL, so it belongs
+            # in the same inbox view as everything else sent to the business.
+            db.session.add(MailboxMessage(
+                direction="inbound",
+                thread_key=email.lower(),
+                from_name=name,
+                from_email=email,
+                to_email=CONTACT_RECIPIENT_EMAIL,
+                subject=f"Pickup request from {name}",
+                body_text=(
+                    f"Pickup address: {address}\n"
+                    f"Preferred date: {pickup_date.strftime('%B %d, %Y')}\n"
+                    f"Preferred time: {time_window}\n"
+                    f"Number of boxes: {box_count or '(not specified)'}\n"
+                    f"Phone: {phone}\n\n"
+                    f"Notes:\n{notes or '(none)'}"
+                ),
+                is_read=False,
+            ))
+            return pickup
+
+        pickup = commit_with_sequence_repair(
+            _create_pickup_and_mailbox_entry, ["pickup_request", "mailbox_message"],
         )
-        db.session.add(pickup)
-        db.session.commit()
 
         send_pickup_request_email(pickup)
         send_pickup_confirmation_to_customer(pickup)
-        # Mirror into the admin Mailbox too, same reasoning as the contact
-        # form: this IS an email to CONTACT_RECIPIENT_EMAIL, so it belongs
-        # in the same inbox view as everything else sent to the business.
-        db.session.add(MailboxMessage(
-            direction="inbound",
-            thread_key=email.lower(),
-            from_name=name,
-            from_email=email,
-            to_email=CONTACT_RECIPIENT_EMAIL,
-            subject=f"Pickup request from {name}",
-            body_text=(
-                f"Pickup address: {address}\n"
-                f"Preferred date: {pickup_date.strftime('%B %d, %Y')}\n"
-                f"Preferred time: {time_window}\n"
-                f"Number of boxes: {box_count or '(not specified)'}\n"
-                f"Phone: {phone}\n\n"
-                f"Notes:\n{notes or '(none)'}"
-            ),
-            is_read=False,
-        ))
-        db.session.commit()
 
         flash(
             f"Thanks {name}! Your pickup request for {pickup_date.strftime('%B %d, %Y')} "
@@ -2301,27 +2357,30 @@ def checkout():
                 "checkout.html", items=items, subtotal=subtotal, tax=tax, total=total, hst_rate=HST_RATE,
             )
 
-        order = Order(
-            order_number=generate_order_number(),
-            customer_name=name,
-            customer_email=email,
-            customer_phone=phone or None,
-            shipping_address=address or None,
-            notes=notes or None,
-            tax_amount=tax,
-            total=total,
-        )
-        db.session.add(order)
-        db.session.flush()  # get order.id before adding items
-        for item in items:
-            db.session.add(OrderItem(
-                order_id=order.id,
-                product_id=item["product"].id,
-                product_name=item["product"].name,
-                unit_price=item["product"].price,
-                quantity=item["quantity"],
-            ))
-        db.session.commit()
+        def _create_order_and_items():
+            order = Order(
+                order_number=generate_order_number(),
+                customer_name=name,
+                customer_email=email,
+                customer_phone=phone or None,
+                shipping_address=address or None,
+                notes=notes or None,
+                tax_amount=tax,
+                total=total,
+            )
+            db.session.add(order)
+            db.session.flush()  # get order.id before adding items
+            for item in items:
+                db.session.add(OrderItem(
+                    order_id=order.id,
+                    product_id=item["product"].id,
+                    product_name=item["product"].name,
+                    unit_price=item["product"].price,
+                    quantity=item["quantity"],
+                ))
+            return order
+
+        order = commit_with_sequence_repair(_create_order_and_items, ["order", "order_item"])
         session[CART_SESSION_KEY] = {}
 
         _send_order_emails(order)
