@@ -377,6 +377,7 @@ def send_pickup_request_email(pickup):
 
 def send_pickup_confirmation_to_customer(pickup):
     """Send the customer a confirmation that their pickup request was received."""
+    notes_line = f"  Notes:    {pickup.notes}\n" if pickup.notes else ""
     return _send_email(
         to_email=pickup.email,
         subject=f"Your Pickup Request — {pickup.pickup_date.strftime('%B %d, %Y')}",
@@ -387,8 +388,8 @@ def send_pickup_confirmation_to_customer(pickup):
             f"  Time:     {pickup.time_window}\n"
             f"  Address:  {pickup.address}\n"
             f"  Boxes:    {pickup.box_count or '(not specified)'}\n"
-            + (f"  Notes:    {pickup.notes}\n" if pickup.notes else "")
-            + f"\nWe'll review your request and be in touch to confirm the details shortly.\n\n"
+            f"{notes_line}"
+            f"\nWe'll review your request and be in touch to confirm the details shortly.\n\n"
             f"If you have any questions, reply to this email or reach us at "
             f"{CONTACT_RECIPIENT_EMAIL}.\n\n"
             f"{COMPANY['name']}"
