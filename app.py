@@ -3132,14 +3132,71 @@ def _db_export_json():
 
 def _db_import_json(data_bytes):
     """Import a JSON database dump.  Settings are upserted; all other tables
-    are truncated then re-inserted so restoring is idempotent."""
+    are truncated then re-inserted so restoring is idempotent.
+    Tables are restored in dependency order (parents before children) and
+    foreign-key checks are deferred for the duration of the transaction."""
     dump = json.loads(data_bytes.decode("utf-8"))
+
+    # Build a dependency-ordered list of table names so parent tables are
+    # inserted before child tables that reference them via FK.
+    from sqlalchemy import inspect as sa_inspect, MetaData
+    meta = MetaData()
+    meta.reflect(bind=db.engine)
+
+    def _topo_sort(tables_meta):
+        """Kahn's algorithm on FK edges → topological order."""
+        deps = {t.name: set() for t in tables_meta}
+        for t in tables_meta:
+            for fk in t.foreign_keys:
+                parent = fk.column.table.name
+                if parent != t.name:
+                    deps[t.name].add(parent)
+        ordered, remaining = [], list(deps.keys())
+        seen = set()
+        # Up to len passes to resolve all deps
+        for _ in range(len(remaining) + 1):
+            progress = False
+            for name in list(remaining):
+                if deps[name] <= seen:
+                    ordered.append(name)
+                    seen.add(name)
+                    remaining.remove(name)
+                    progress = True
+            if not remaining:
+                break
+            if not progress:
+                # Circular FK — just append the rest as-is
+                ordered.extend(remaining)
+                break
+        return ordered
+
+    ordered_tables = _topo_sort(list(meta.tables.values()))
+
     with db.engine.begin() as conn:
-        for table, rows in dump.items():
+        # Disable FK checks for the session so we can truncate freely.
+        # Postgres uses SET CONSTRAINTS, SQLite uses PRAGMA.
+        dialect = db.engine.dialect.name
+        if dialect == "postgresql":
+            conn.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+        elif dialect == "sqlite":
+            conn.execute(text("PRAGMA foreign_keys = OFF"))
+
+        # Delete in reverse order (children first) to satisfy FKs even
+        # when SET CONSTRAINTS DEFERRED isn't fully supported by the driver.
+        for table in reversed(ordered_tables):
+            if table not in dump or not dump[table]:
+                continue
+            try:
+                conn.execute(text(f'DELETE FROM "{table}"'))
+            except Exception:
+                pass  # table may not exist yet on a brand-new install
+
+        # Insert in dependency order (parents first)
+        for table in ordered_tables:
+            rows = dump.get(table)
             if not rows:
                 continue
             if table == "setting":
-                # Upsert: keep any keys that weren't in the backup as-is
                 for row in rows:
                     existing = conn.execute(
                         text(f'SELECT 1 FROM "{table}" WHERE key = :k'),
@@ -3158,8 +3215,6 @@ def _db_import_json(data_bytes):
                             row,
                         )
             else:
-                # Truncate then bulk-insert
-                conn.execute(text(f'DELETE FROM "{table}"'))
                 for row in rows:
                     cols = ", ".join(f'"{c}"' for c in row)
                     placeholders = ", ".join(f":{c}" for c in row)
@@ -3167,6 +3222,9 @@ def _db_import_json(data_bytes):
                         text(f'INSERT INTO "{table}" ({cols}) VALUES ({placeholders})'),
                         row,
                     )
+
+        if dialect == "sqlite":
+            conn.execute(text("PRAGMA foreign_keys = ON"))
 
 
 @app.route("/admin/settings/backup/database")
