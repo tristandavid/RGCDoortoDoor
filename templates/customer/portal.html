@@ -65,14 +65,14 @@
             </thead>
             <tbody>
               {% for order in orders %}
-              <tr>
+              <tr class="row-link" onclick="window.location = '{{ url_for('order_confirmation', order_number=order.order_number) }}';">
                 <td><strong>{{ order.order_number }}</strong></td>
                 <td>{{ order.created_at.strftime('%b %d, %Y') }}</td>
                 <td>{{ order.items|length }} item{% if order.items|length != 1 %}s{% endif %}</td>
                 <td>${{ "%.2f"|format(order.total) }}</td>
                 <td><span class="badge {{ order.status_badge_class }}">{{ order.status }}</span></td>
                 <td>
-                  <a href="{{ url_for('order_confirmation', order_number=order.order_number) }}" class="btn btn-sm btn-outline">View</a>
+                  <a href="{{ url_for('order_confirmation', order_number=order.order_number) }}" class="btn btn-sm btn-outline">View Details</a>
                 </td>
               </tr>
               {% endfor %}
@@ -116,7 +116,7 @@
                 <td><span class="badge {{ p.status_badge_class }}">{{ p.status }}</span></td>
                 <td>
                   {% if p.invoice_filename %}
-                    <a href="{{ url_for('static', filename=p.invoice_filename) }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">🧾 View</a>
+                    <a href="{{ url_for('static', filename=p.invoice_filename) }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">Download</a>
                   {% else %}
                     <span style="color:var(--text-muted);">—</span>
                   {% endif %}

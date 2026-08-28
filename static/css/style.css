@@ -398,10 +398,21 @@ a { color: inherit; text-decoration: none; }
 }
 .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.18); }
 .btn-outline {
+  /* Visible on the light/white backgrounds this is used on almost
+     everywhere (admin cards, tables, the customer portal, cart, product
+     grids) — a white-on-white outline button there rendered as a blank
+     pill with invisible text. The hero section is the one dark-background
+     exception and gets its own light-on-dark override below. */
   background: transparent;
-  border: 2px solid #fff;
+  border: 2px solid var(--primary);
+  color: var(--primary);
+}
+.btn-outline:hover { background: rgba(30, 58, 138, 0.06); }
+.hero-ctas .btn-outline, .cookie-actions .btn-outline {
+  border-color: #fff;
   color: #fff;
 }
+.hero-ctas .btn-outline:hover { background: rgba(255,255,255,0.12); }
 .btn-primary {
   background: var(--primary);
   color: #fff;

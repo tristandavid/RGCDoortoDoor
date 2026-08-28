@@ -2262,6 +2262,20 @@ def newsletter_signup():
         db.session.add(Subscriber(email=email, name=name, address=address, phone=phone))
         db.session.commit()
         flash(f"Thanks for subscribing, {email}!", "success")
+
+    # The newsletter list (Subscriber) and the customer portal (CustomerUser)
+    # are deliberately separate — subscribing doesn't create a login. But if
+    # this email doesn't already have a portal account, nudge them toward
+    # one (with their address/phone already carried over if they gave it in
+    # the footer form) instead of just silently adding them to a list they
+    # can't do anything else with.
+    if not CustomerUser.query.filter_by(email=email).first():
+        flash(
+            "Want to track orders and pickups too? Create a free account below — "
+            "we've already filled in your email.",
+            "success",
+        )
+        return redirect(url_for("customer_login", tab="register", email=email))
     return redirect(request.referrer or url_for("home"))
 
 
@@ -3762,7 +3776,10 @@ def customer_login():
             flash("Your account is inactive. Please contact us.", "error")
         else:
             flash("Incorrect email or password.", "error")
-    return render_template("customer/login.html", tab=request.args.get("tab", "login"))
+    return render_template(
+        "customer/login.html", tab=request.args.get("tab", "login"),
+        reg_email=request.args.get("email", ""),
+    )
 
 
 @app.route("/customer/forgot-password", methods=["GET", "POST"])
