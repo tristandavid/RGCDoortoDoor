@@ -116,7 +116,7 @@
                 <td><span class="badge {{ p.status_badge_class }}">{{ p.status }}</span></td>
                 <td>
                   {% if p.invoice_filename %}
-                    <a href="{{ url_for('static', filename=p.invoice_filename) }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">Download</a>
+                    <a href="{{ url_for('customer_pickup_invoice', pickup_id=p.id) }}" class="btn btn-sm btn-outline">Download</a>
                   {% else %}
                     <span style="color:var(--text-muted);">—</span>
                   {% endif %}

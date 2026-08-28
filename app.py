@@ -3101,8 +3101,8 @@ def admin_settings_mfa_disable():
 # Two independent backup types:
 #   - Database backup: a JSON export of every table row — portable across
 #     Postgres and SQLite, and safe to import on a fresh install.
-#   - Files backup: a ZIP of static/uploads/ and static/branding/ — the
-#     product images, the favicon, and any other uploaded assets.
+#   - Files backup: a ZIP of static/uploads/, static/branding/, and static/invoices/ —
+#     product images, the favicon, and any admin-uploaded pickup invoices.
 #
 # Restore works the same way in reverse: upload the file that was downloaded,
 # and the server applies it. Database restore is additive for Settings (merges
@@ -3250,10 +3250,10 @@ def admin_backup_database():
 @app.route("/admin/settings/backup/files")
 @login_required
 def admin_backup_files():
-    """Download a ZIP of all uploaded static files (uploads + branding)."""
+    """Download a ZIP of all uploaded static files (uploads, branding, invoices)."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for subfolder in ("uploads", "branding"):
+        for subfolder in ("uploads", "branding", "invoices"):
             folder_path = os.path.join(app.static_folder, subfolder)
             if not os.path.isdir(folder_path):
                 continue
@@ -3315,10 +3315,11 @@ def admin_restore_files():
         buf = io.BytesIO(data)
         with zipfile.ZipFile(buf, "r") as zf:
             for member in zf.namelist():
-                # Only allow uploads/ and branding/ paths — no path traversal
+                # Only allow uploads/, branding/, and invoices/ paths — no path traversal
                 norm = os.path.normpath(member)
                 if norm.startswith("..") or (
                     not norm.startswith("uploads") and not norm.startswith("branding")
+                    and not norm.startswith("invoices")
                 ):
                     continue
                 dest = os.path.join(app.static_folder, norm)
@@ -4253,6 +4254,29 @@ def customer_portal():
         PickupRequest.created_at.desc()
     ).limit(10).all()
     return render_template("customer/portal.html", user=user, orders=orders, pickups=pickups)
+
+
+@app.route("/customer/pickup/<int:pickup_id>/invoice")
+@customer_login_required
+def customer_pickup_invoice(pickup_id):
+    """Serve the admin-uploaded invoice PDF for a pickup, but only to the
+    customer whose email matches the pickup — never exposed as a raw static
+    file so that guessing a UUID doesn't leak someone else's invoice."""
+    user = CustomerUser.query.get(session["customer_user_id"])
+    pickup = PickupRequest.query.get_or_404(pickup_id)
+    if pickup.email.lower() != user.email.lower():
+        abort(403)
+    if not pickup.invoice_filename:
+        abort(404)
+    file_path = os.path.join(app.static_folder, pickup.invoice_filename)
+    if not os.path.isfile(file_path):
+        abort(404)
+    # Derive a tidy download filename: RGC-Invoice-<date>.pdf (or whatever ext)
+    ext = pickup.invoice_filename.rsplit(".", 1)[-1].lower()
+    date_str = pickup.pickup_date.strftime("%Y%m%d") if pickup.pickup_date else "invoice"
+    download_name = f"RGC-Invoice-{date_str}.{ext}"
+    from flask import send_file
+    return send_file(file_path, as_attachment=True, download_name=download_name)
 
 
 # ---------------------------------------------------------------------------
