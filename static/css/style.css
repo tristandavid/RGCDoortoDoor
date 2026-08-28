@@ -293,7 +293,7 @@ a { color: inherit; text-decoration: none; }
 }
 /* Small parcel icon that travels back and forth along that same arc. */
 .hero-route-marker {
-  offset-path: path("M 524 149 Q 1055 90 1587 303");
+  offset-path: path("M 527 203 Q 1022 109 1518 288");
   offset-rotate: 0deg;
   offset-distance: 0%;
   animation: hero-route-travel 3.6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
