@@ -22,13 +22,6 @@
 <div class="admin-card" style="max-width:760px; margin-top:20px;">
   <h3 style="margin-top:0;">Reply</h3>
 
-  <div class="admin-actions" style="margin-bottom:12px; flex-wrap:wrap;">
-    {% for label, text in quick_replies %}
-      <button type="button" class="btn btn-small btn-outline quick-reply-btn" style="color:var(--primary); border-color:var(--primary);"
-              data-reply-target="reply-body" data-reply-text="{{ text }}">{{ label }}</button>
-    {% endfor %}
-  </div>
-
   <form class="admin-form" method="post" action="{{ url_for('admin_mailbox_reply', thread_key=thread_key) }}">
     <div>
       <label for="reply-subject">Subject</label>

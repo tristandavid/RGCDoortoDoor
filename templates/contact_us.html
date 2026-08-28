@@ -24,19 +24,26 @@
       </div>
     </div>
     <div>
+      {% if current_customer %}
+        <div class="note-box" style="margin-bottom:1rem;">
+          ✅ Logged in as <strong>{{ current_customer.name }}</strong> — your details have been pre-filled.
+        </div>
+      {% endif %}
       <form class="contact-form card" method="post" action="{{ url_for('contact_us') }}" enctype="multipart/form-data">
         <h3 style="margin-top:0;">Send Us a Message</h3>
         <div>
           <label for="name">Name</label>
-          <input type="text" id="name" name="name" placeholder="Your name">
+          <input type="text" id="name" name="name" placeholder="Your name"
+                 value="{{ request.form.get('name') or (prefill.name if prefill else '') }}">
         </div>
         <div>
           <label for="email">Email *</label>
-          <input type="email" id="email" name="email" placeholder="you@example.com" required>
+          <input type="email" id="email" name="email" placeholder="you@example.com" required
+                 value="{{ request.form.get('email') or (prefill.email if prefill else '') }}">
         </div>
         <div>
           <label for="message">Message</label>
-          <textarea id="message" name="message" placeholder="How can we help?"></textarea>
+          <textarea id="message" name="message" placeholder="How can we help?">{{ request.form.get('message', '') }}</textarea>
         </div>
         <div>
           <label for="attachment">Attachment (optional)</label>

@@ -4,26 +4,102 @@
 
 <section class="section">
   <div class="container">
-    <div class="login-box">
-      <h2 style="margin-top:0;">Customer Login</h2>
-      <p style="color:var(--text-muted);">Sign in to track your orders, view your history, and manage your pickups.</p>
-      <form method="post" class="admin-form">
-        <div>
-          <label for="email">Email Address</label>
-          <input type="email" id="email" name="email" required autofocus autocomplete="email"
-                 value="{{ request.form.get('email', '') }}">
-        </div>
-        <div>
-          <label for="password">Password</label>
-          <input type="password" id="password" name="password" required autocomplete="current-password">
-        </div>
-        <button type="submit" class="btn btn-primary" style="width:100%;">Sign In</button>
-      </form>
-      <p style="margin-top:1.25rem; text-align:center; color:var(--text-muted); font-size:.9rem;">
-        Don't have an account? <a href="{{ url_for('contact_us') }}">Contact us</a> to get set up.
-      </p>
+    <div class="login-box" style="max-width:460px;">
+
+      {# Tab switcher #}
+      <div style="display:flex; border-bottom:2px solid var(--border); margin-bottom:1.5rem; gap:0;">
+        <button type="button" id="tab-login-btn"
+          onclick="switchTab('login')"
+          style="flex:1; padding:.65rem 1rem; border:none; background:none; cursor:pointer;
+                 font-weight:600; font-size:.95rem; border-bottom:3px solid transparent;
+                 margin-bottom:-2px; transition:color .15s, border-color .15s;"
+          class="tab-btn {% if tab != 'register' %}tab-active{% endif %}">
+          Sign In
+        </button>
+        <button type="button" id="tab-register-btn"
+          onclick="switchTab('register')"
+          style="flex:1; padding:.65rem 1rem; border:none; background:none; cursor:pointer;
+                 font-weight:600; font-size:.95rem; border-bottom:3px solid transparent;
+                 margin-bottom:-2px; transition:color .15s, border-color .15s;"
+          class="tab-btn {% if tab == 'register' %}tab-active{% endif %}">
+          Create Account
+        </button>
+      </div>
+
+      {# LOGIN FORM #}
+      <div id="panel-login" {% if tab == 'register' %}style="display:none;"{% endif %}>
+        <p style="color:var(--text-muted); margin-top:0;">Sign in to view your orders and manage pickups.</p>
+        <form method="post" class="admin-form">
+          <input type="hidden" name="action" value="login">
+          <div>
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" required autofocus autocomplete="email"
+                   value="{{ request.form.get('email', '') }}">
+          </div>
+          <div>
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+          </div>
+          <p style="margin:.35rem 0 0; text-align:right; font-size:.85rem;">
+            <a href="{{ url_for('customer_forgot_password') }}">Forgot your password?</a>
+          </p>
+          <button type="submit" class="btn btn-primary" style="width:100%; margin-top:.25rem;">Sign In</button>
+        </form>
+        <p style="margin-top:1.1rem; text-align:center; font-size:.88rem; color:var(--text-muted);">
+          Don't have an account?
+          <a href="#" onclick="switchTab('register'); return false;">Create one for free →</a>
+        </p>
+      </div>
+
+      {# REGISTER FORM #}
+      <div id="panel-register" {% if tab != 'register' %}style="display:none;"{% endif %}>
+        <p style="color:var(--text-muted); margin-top:0;">Create a free account to track orders and book pickups.</p>
+        <form method="post" class="admin-form">
+          <input type="hidden" name="action" value="register">
+          <div>
+            <label for="reg_name">Full Name</label>
+            <input type="text" id="reg_name" name="reg_name" required autocomplete="name"
+                   value="{{ reg_name or '' }}">
+          </div>
+          <div>
+            <label for="reg_email">Email Address</label>
+            <input type="email" id="reg_email" name="reg_email" required autocomplete="email"
+                   value="{{ reg_email or '' }}">
+          </div>
+          <div>
+            <label for="reg_password">Password <span style="color:var(--text-muted); font-weight:400;">(min. 8 characters)</span></label>
+            <input type="password" id="reg_password" name="reg_password" required
+                   autocomplete="new-password" minlength="8">
+          </div>
+          <div>
+            <label for="reg_confirm">Confirm Password</label>
+            <input type="password" id="reg_confirm" name="reg_confirm" required
+                   autocomplete="new-password" minlength="8">
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%; margin-top:.25rem;">Create Account</button>
+        </form>
+        <p style="margin-top:1.1rem; text-align:center; font-size:.88rem; color:var(--text-muted);">
+          Already have an account?
+          <a href="#" onclick="switchTab('login'); return false;">Sign in →</a>
+        </p>
+      </div>
+
     </div>
   </div>
 </section>
+
+<style>
+.tab-btn { color: var(--text-muted); }
+.tab-btn.tab-active { color: var(--primary); border-color: var(--primary) !important; }
+</style>
+
+<script>
+function switchTab(tab) {
+  document.getElementById('panel-login').style.display    = tab === 'login'    ? '' : 'none';
+  document.getElementById('panel-register').style.display = tab === 'register' ? '' : 'none';
+  document.getElementById('tab-login-btn').classList.toggle('tab-active',    tab === 'login');
+  document.getElementById('tab-register-btn').classList.toggle('tab-active', tab === 'register');
+}
+</script>
 
 {% endblock %}

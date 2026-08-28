@@ -1,7 +1,7 @@
 {% extends "admin/_admin_base.html" %}
 {% block title %}Users | Admin{% endblock %}
 {% block page_title %}User Accounts{% endblock %}
-{% block page_subtitle %}<p class="admin-subtitle">Manage customer, staff, and admin accounts for the customer portal.</p>{% endblock %}
+{% block page_subtitle %}<p class="admin-subtitle">Manage customer accounts for the customer portal.</p>{% endblock %}
 
 {% block admin_content %}
 
@@ -16,7 +16,7 @@
       <tr>
         <th>Name</th>
         <th>Email</th>
-        <th>Role</th>
+        <th>Page Access</th>
         <th>Status</th>
         <th>Created</th>
         <th></th>
@@ -28,9 +28,11 @@
         <td><strong>{{ user.name }}</strong></td>
         <td>{{ user.email }}</td>
         <td>
-          <span class="badge {% if user.role == 'admin' %}badge-published{% elif user.role == 'staff' %}badge-status{% else %}badge-pending{% endif %}">
-            {{ user.role_label }}
-          </span>
+          {% if user.has_full_page_access() %}
+            <span class="badge badge-delivered">All Pages</span>
+          {% else %}
+            <span class="badge badge-status">{{ user.get_allowed_page_keys()|length }} of {{ total_pages }} pages</span>
+          {% endif %}
         </td>
         <td>
           {% if user.is_active %}

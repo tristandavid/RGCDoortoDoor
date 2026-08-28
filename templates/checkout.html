@@ -35,27 +35,35 @@
       </div>
     </div>
     <div>
+      {% if current_customer %}
+        <div class="note-box" style="margin-bottom:1rem;">
+          ✅ Logged in as <strong>{{ current_customer.name }}</strong> — your details have been pre-filled.
+        </div>
+      {% endif %}
       <form class="contact-form card" method="post">
         <h3 style="margin-top:0;">Your Details</h3>
         <div>
           <label for="name">Full Name *</label>
-          <input type="text" id="name" name="name" required>
+          <input type="text" id="name" name="name" required
+                 value="{{ request.form.get('name') or (prefill.name if prefill else '') }}">
         </div>
         <div>
           <label for="email">Email *</label>
-          <input type="email" id="email" name="email" placeholder="you@example.com" required>
+          <input type="email" id="email" name="email" placeholder="you@example.com" required
+                 value="{{ request.form.get('email') or (prefill.email if prefill else '') }}">
         </div>
         <div>
           <label for="phone">Phone (optional)</label>
-          <input type="text" id="phone" name="phone">
+          <input type="text" id="phone" name="phone"
+                 value="{{ request.form.get('phone') or (prefill.phone if prefill else '') }}">
         </div>
         <div>
           <label for="address">Shipping Address / Pickup Notes</label>
-          <textarea id="address" name="address" placeholder="Where should this go, or how would you like to arrange pickup?"></textarea>
+          <textarea id="address" name="address" placeholder="Where should this go, or how would you like to arrange pickup?">{{ request.form.get('address') or (prefill.address if prefill else '') }}</textarea>
         </div>
         <div>
           <label for="notes">Order Notes (optional)</label>
-          <textarea id="notes" name="notes"></textarea>
+          <textarea id="notes" name="notes">{{ request.form.get('notes', '') }}</textarea>
         </div>
         <button type="submit" class="btn btn-primary" style="align-self:flex-start;">Place Order</button>
       </form>

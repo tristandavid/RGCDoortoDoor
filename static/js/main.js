@@ -8,14 +8,6 @@ document.querySelectorAll('.dropdown-toggle').forEach(function (btn) {
   });
 });
 
-// Admin Mailbox: quick-reply pills fill in the message textarea
-document.querySelectorAll('.quick-reply-btn').forEach(function (btn) {
-  btn.addEventListener('click', function () {
-    var target = document.getElementById(btn.getAttribute('data-reply-target'));
-    if (target) target.value = btn.getAttribute('data-reply-text');
-  });
-});
-
 // Footer newsletter: Subscribe button opens a popup with the signup form
 (function () {
   var overlay = document.getElementById('newsletter-modal');

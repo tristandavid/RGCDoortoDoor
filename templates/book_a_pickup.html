@@ -26,6 +26,12 @@
       </div>
     </div>
 
+    {% if current_customer %}
+      <div class="note-box" style="margin-bottom:1.5rem;">
+        ✅ Logged in as <strong>{{ current_customer.name }}</strong> — your details have been pre-filled below.
+      </div>
+    {% endif %}
+
     <form class="pickup-form" method="post" action="{{ url_for('book_a_pickup') }}">
       <div class="pickup-steps">
 
@@ -34,15 +40,21 @@
           <div class="pickup-step-body">
             <div>
               <label for="name">Full Name *</label>
-              <input type="text" id="name" name="name" value="{{ form.get('name', '') }}" placeholder="Your name" required>
+              <input type="text" id="name" name="name"
+                     value="{{ form.get('name') or (prefill.name if prefill else '') }}"
+                     placeholder="Your name" required>
             </div>
             <div>
               <label for="email">Email *</label>
-              <input type="email" id="email" name="email" value="{{ form.get('email', '') }}" placeholder="you@example.com" required>
+              <input type="email" id="email" name="email"
+                     value="{{ form.get('email') or (prefill.email if prefill else '') }}"
+                     placeholder="you@example.com" required>
             </div>
             <div>
               <label for="phone">Phone *</label>
-              <input type="tel" id="phone" name="phone" value="{{ form.get('phone', '') }}" placeholder="(555) 555-5555" required>
+              <input type="tel" id="phone" name="phone"
+                     value="{{ form.get('phone') or (prefill.phone if prefill else '') }}"
+                     placeholder="(555) 555-5555" required>
             </div>
           </div>
         </div>
@@ -52,7 +64,7 @@
           <div class="pickup-step-body">
             <div>
               <label for="address">Pickup Address *</label>
-              <textarea id="address" name="address" placeholder="Street, city, postal code" required>{{ form.get('address', '') }}</textarea>
+              <textarea id="address" name="address" placeholder="Street, city, postal code" required>{{ form.get('address') or (prefill.address if prefill else '') }}</textarea>
             </div>
             <div>
               <label for="pickup_date">Preferred Date *</label>

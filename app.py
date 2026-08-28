@@ -177,6 +177,16 @@ MOBILE_TOKEN_MAX_AGE_SECONDS = int(
 ) * 24 * 60 * 60
 _mobile_token_serializer = URLSafeTimedSerializer(app.secret_key, salt="rgc-mobile-api-token")
 
+# --- Customer "forgot password" reset links ----------------------------------
+# A reset link's token embeds the account id and a short slice of its
+# CURRENT password hash. That means once the link is used (or the customer
+# changes their password some other way), every previously-issued link for
+# that account stops working on its own -- there's no separate "used"
+# flag to track. Links expire after PASSWORD_RESET_MAX_AGE_SECONDS either
+# way. Sent by email via _send_email, same SMTP plumbing as everything else.
+PASSWORD_RESET_MAX_AGE_SECONDS = 60 * 60  # 1 hour
+_password_reset_serializer = URLSafeTimedSerializer(app.secret_key, salt="rgc-customer-password-reset")
+
 db = SQLAlchemy(app)
 
 # --- File storage: local disk ------------------------------------------------
@@ -297,10 +307,11 @@ def send_pickup_request_email(pickup):
 # it — so there's currently no working way to mirror inbound mail without a
 # third-party relay like Mailgun back in the picture.
 
-# Canned one-tap replies shown as quick-reply buttons in the Mailbox (web
-# admin and the mobile app). These only ever pre-fill the reply box -- they
-# are never sent without the owner reviewing/editing and tapping Send, same
-# as a manually typed reply.
+# Canned one-tap replies for the Mailbox. Removed from the web admin
+# Mailbox UI (mailbox_thread.html / mailbox_compose.html no longer render
+# these) but still served to the mobile app via /api/v1/me, which pre-fills
+# its own reply box with them. Never sent without the owner reviewing/
+# editing and tapping Send, same as a manually typed reply.
 QUICK_REPLIES = [
     ("Thanks for reaching out",
      "Thanks for reaching out! We've received your message and will get back to you shortly."),
@@ -1041,35 +1052,66 @@ class Subscriber(db.Model):
 
 
 # ---------------------------------------------------------------------------
-# Customer / Staff user accounts
+# Customer user accounts
 # ---------------------------------------------------------------------------
+#
+# Only one account type exists on the public-facing portal: "customer". The
+# old "staff"/"admin" CustomerUser roles (which used to skip the page
+# restriction below entirely) have been removed — every self-registered or
+# admin-created account here is a customer account, full stop. Staff who
+# need the back-office admin panel use the separate ADMIN_USERNAME/
+# CREATOR_USERNAME login system above (see _match_admin_credentials); that
+# system was never tied to CustomerUser.role in the first place.
 
-CUSTOMER_USER_ROLES = ["customer", "staff", "admin"]
+CUSTOMER_USER_ROLES = ["customer"]
 
-# Pages customers can access when logged in as a customer.
-# Staff and admin can see everything. Customers only see these endpoints.
-CUSTOMER_ALLOWED_ENDPOINTS = {
-    "home", "about_us", "contact_us", "rates", "updates", "update_detail",
-    "track", "sari_sari", "empty_box_sales", "packaging_items",
-    "cart_view", "cart_add", "cart_update", "cart_remove",
+# Endpoints every logged-in customer can always reach, regardless of the
+# per-account page access chosen by the admin below: core account/auth
+# flows, the cart/checkout/order pipeline, legal pages, and static assets.
+# Without this floor, an admin could accidentally lock a customer out of
+# their own cart or the ability to log out.
+CUSTOMER_ALWAYS_ALLOWED_ENDPOINTS = {
+    "home", "cart_view", "cart_add", "cart_update", "cart_remove",
     "checkout", "order_confirmation", "order_confirmation_invoice",
-    "book_a_pickup", "privacy_policy", "terms_and_conditions",
-    "newsletter_signup", "healthz",
-    # customer portal endpoints
-    "customer_portal", "customer_logout", "customer_login",
+    "privacy_policy", "terms_and_conditions", "newsletter_signup", "healthz",
+    # customer portal / auth endpoints
+    "customer_portal", "customer_logout", "customer_login", "customer_register",
+    "customer_profile_update", "customer_forgot_password", "customer_reset_password",
     # static files, etc.
     "static",
 }
 
+# Content pages an admin can individually grant or revoke per customer
+# account from Admin > Users (see CustomerUser.allowed_pages below). Each
+# entry is (key stored in the account's allowed_pages list, label shown in
+# the admin UI, the set of endpoints that page key unlocks).
+CUSTOMER_TOGGLEABLE_PAGES = [
+    ("about_us", "About Us", {"about_us"}),
+    ("contact_us", "Contact Us", {"contact_us"}),
+    ("rates", "Rates", {"rates"}),
+    ("updates", "Updates / Blog", {"updates", "update_detail"}),
+    ("track", "Track a Shipment", {"track"}),
+    ("sari_sari", "Sari-Sari Store", {"sari_sari"}),
+    ("empty_box_sales", "Empty Box Sales", {"empty_box_sales"}),
+    ("packaging_items", "Packaging Items", {"packaging_items"}),
+    ("book_a_pickup", "Book a Pickup", {"book_a_pickup"}),
+]
+CUSTOMER_TOGGLEABLE_PAGE_KEYS = [key for key, _label, _endpoints in CUSTOMER_TOGGLEABLE_PAGES]
+
 
 class CustomerUser(db.Model):
-    """A site-registered user account (customer, staff, or admin role).
+    """A site-registered customer account for the public-facing portal:
+    customers can track their orders, book pickups, and view their
+    purchase history.
 
     Separate from the env-var admin credentials (ADMIN_USERNAME/ADMIN_PASSWORD)
     — those are the back-office owner/creator logins that manage the admin
-    panel. CustomerUser accounts are for the public-facing portal: customers
-    can track their orders and view their purchase history; staff can also
-    see the admin panel; admin role gets full admin access.
+    panel and have nothing to do with this table.
+
+    Which public pages a given customer can browse while logged in is
+    controlled per-account by `allowed_pages` (see get_allowed_page_keys/
+    allowed_endpoints below) rather than by a role — every account here is
+    a "customer".
 
     Passwords are stored as a SHA-256 hex digest (same simple approach used
     for MFA backup codes elsewhere). For a larger deployment you'd use
@@ -1081,6 +1123,13 @@ class CustomerUser(db.Model):
     password_hash = db.Column(db.String(64), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="customer")
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    phone = db.Column(db.String(50), nullable=True)
+    address = db.Column(db.String(400), nullable=True)
+    # JSON list of CUSTOMER_TOGGLEABLE_PAGES keys this account may view.
+    # NULL means "not yet configured by an admin" and is treated as "every
+    # page allowed" (see get_allowed_page_keys) so existing accounts aren't
+    # suddenly locked out the moment this column appears.
+    allowed_pages = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def set_password(self, password):
@@ -1094,7 +1143,86 @@ class CustomerUser(db.Model):
 
     @property
     def role_label(self):
-        return {"customer": "Customer", "staff": "Staff", "admin": "Admin"}.get(self.role, self.role.title())
+        return "Customer"
+
+    def get_allowed_page_keys(self):
+        """Which CUSTOMER_TOGGLEABLE_PAGES keys this account can view, on
+        top of the always-allowed floor. NULL/unparseable -> every page
+        (see the allowed_pages column note above)."""
+        if self.allowed_pages is None:
+            return list(CUSTOMER_TOGGLEABLE_PAGE_KEYS)
+        try:
+            keys = json.loads(self.allowed_pages)
+        except (TypeError, ValueError):
+            return list(CUSTOMER_TOGGLEABLE_PAGE_KEYS)
+        if not isinstance(keys, list):
+            return list(CUSTOMER_TOGGLEABLE_PAGE_KEYS)
+        return [k for k in keys if k in CUSTOMER_TOGGLEABLE_PAGE_KEYS]
+
+    def set_allowed_page_keys(self, keys):
+        valid = [k for k in CUSTOMER_TOGGLEABLE_PAGE_KEYS if k in (keys or [])]
+        self.allowed_pages = json.dumps(valid)
+
+    def has_full_page_access(self):
+        return set(self.get_allowed_page_keys()) == set(CUSTOMER_TOGGLEABLE_PAGE_KEYS)
+
+    def allowed_endpoints(self):
+        """The full set of endpoints this account may reach on the public
+        site: the always-allowed floor plus whichever toggleable pages the
+        admin granted it."""
+        endpoints = set(CUSTOMER_ALWAYS_ALLOWED_ENDPOINTS)
+        granted = set(self.get_allowed_page_keys())
+        for key, _label, page_endpoints in CUSTOMER_TOGGLEABLE_PAGES:
+            if key in granted:
+                endpoints |= page_endpoints
+        return endpoints
+
+
+def generate_password_reset_token(user):
+    """A signed, time-limited token for `user`'s "forgot password" link.
+    Embeds a short slice of the account's CURRENT password hash so the
+    link stops working the moment the password actually changes (by this
+    link or any other means) -- no separate used-token bookkeeping needed.
+    """
+    return _password_reset_serializer.dumps({
+        "uid": user.id,
+        "ph": user.password_hash[:16],
+    })
+
+
+def verify_password_reset_token(token):
+    """Returns the CustomerUser a still-valid reset `token` belongs to, or
+    None if it's missing, malformed, expired, or already used (i.e. the
+    password has changed since it was issued)."""
+    try:
+        data = _password_reset_serializer.loads(token, max_age=PASSWORD_RESET_MAX_AGE_SECONDS)
+    except (BadSignature, SignatureExpired):
+        return None
+    user = CustomerUser.query.get(data.get("uid"))
+    if not user or not user.is_active:
+        return None
+    if data.get("ph") != user.password_hash[:16]:
+        return None
+    return user
+
+
+def send_password_reset_email(user):
+    """Emails `user` a one-hour reset link. Reuses _send_email (same
+    Microsoft 365 SMTP plumbing as the contact form and admin Mailbox)."""
+    token = generate_password_reset_token(user)
+    reset_url = url_for("customer_reset_password", token=token, _external=True)
+    return _send_email(
+        to_email=user.email,
+        subject=f"Reset your {COMPANY['name']} password",
+        body=(
+            f"Hi {user.name},\n\n"
+            "We received a request to reset the password on your account. "
+            "Click the link below to choose a new one -- it expires in 1 hour:\n\n"
+            f"{reset_url}\n\n"
+            "If you didn't request this, you can safely ignore this email; "
+            "your password won't change."
+        ),
+    )
 
 
 # Starting copy for the editable pages below — seeded once into the
@@ -1220,6 +1348,17 @@ with app.app_context():
     _ensure_column("manual_invoice", "tax_override", "NUMERIC(10, 2)")
     # CustomerUser columns (safe if table already existed without them)
     _ensure_column("customer_user", "is_active", "BOOLEAN DEFAULT TRUE")
+    _ensure_column("customer_user", "phone", "VARCHAR(50)")
+    _ensure_column("customer_user", "address", "VARCHAR(400)")
+    _ensure_column("customer_user", "allowed_pages", "TEXT")
+    # The "staff"/"admin" CustomerUser roles have been removed — every
+    # account on the public portal is a "customer" now, with page access
+    # controlled individually via allowed_pages instead. Any pre-existing
+    # rows from before this change are folded into "customer" here so
+    # nothing is left in a role that no longer means anything.
+    CustomerUser.query.filter(CustomerUser.role.in_(["staff", "admin"])).update(
+        {"role": "customer"}, synchronize_session=False,
+    )
     for slug, (label, body) in DEFAULT_PAGE_CONTENT.items():
         if not PageContent.query.get(slug):
             db.session.add(PageContent(slug=slug, label=label, body=body))
@@ -1561,9 +1700,10 @@ def api_owner_required(view):
 
 
 def customer_login_required(view):
-    """Requires any logged-in customer/staff/admin user (via the customer
-    portal session). Staff/admin users are always allowed through. Customer
-    users are checked against CUSTOMER_ALLOWED_ENDPOINTS for the current route.
+    """Requires any logged-in customer user (via the customer portal
+    session). Which pages that user may reach beyond this is checked
+    against their own allowed_endpoints() by enforce_customer_page_restrictions
+    below.
     """
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -1582,27 +1722,33 @@ def customer_login_required(view):
 
 @app.before_request
 def enforce_customer_page_restrictions():
-    """If a customer-role user (not staff/admin) tries to access a page
-    outside CUSTOMER_ALLOWED_ENDPOINTS, redirect them to their portal.
-    This runs on every request so there's no way to slip through via a
-    direct URL.
+    """If a logged-in customer tries to access a page outside their own
+    allowed_endpoints() (see CustomerUser above — the always-allowed floor
+    plus whatever pages the admin granted them), redirect them to their
+    portal.
+
+    Admin routes (/admin/*, /api/*) are always skipped — they have their
+    own session guard and the customer session is irrelevant there.
+    This prevents the customer session from interfering with admin MFA setup
+    or any other admin-only workflow.
     """
     user_id = session.get("customer_user_id")
     if not user_id:
-        return  # not logged in as a customer user — no restriction
-    # Don't enforce on static assets or the admin backend (admin has its
-    # own separate session check)
+        return  # not logged in as a customer — no restriction
+
     endpoint = request.endpoint
+    # Skip for static files, missing endpoints, and ALL admin/API routes
     if not endpoint or endpoint == "static":
         return
+    if request.path.startswith("/admin") or request.path.startswith("/api"):
+        return
+
     user = CustomerUser.query.get(user_id)
     if not user or not user.is_active:
         return
-    if user.role == "customer" and endpoint not in CUSTOMER_ALLOWED_ENDPOINTS:
+    if endpoint not in user.allowed_endpoints():
         flash("You don't have permission to view that page.", "error")
         return redirect(url_for("customer_portal"))
-    # Staff/admin roles have no page restriction on the public site.
-    # (Admin panel access is controlled separately by the admin session.)
 
 
 # ---------------------------------------------------------------------------
@@ -1660,7 +1806,9 @@ def contact_us():
             flash(f"Thanks {name or 'there'}! Your message has been received. "
                   f"We'll get back to you at {email} soon.", "success")
         return redirect(url_for("contact_us"))
-    return render_template("contact_us.html", intro_text=get_page_content("contact-intro"))
+    customer_id = session.get("customer_user_id")
+    prefill = CustomerUser.query.get(customer_id) if customer_id else None
+    return render_template("contact_us.html", intro_text=get_page_content("contact-intro"), prefill=prefill)
 
 
 @app.route("/book-a-pickup", methods=["GET", "POST"])
@@ -1708,8 +1856,10 @@ def book_a_pickup():
         if errors:
             for error in errors:
                 flash(error, "error")
+            customer_id = session.get("customer_user_id")
+            prefill = CustomerUser.query.get(customer_id) if customer_id else None
             return render_template(
-                "book_a_pickup.html", time_windows=PICKUP_TIME_WINDOWS, form=request.form,
+                "book_a_pickup.html", time_windows=PICKUP_TIME_WINDOWS, form=request.form, prefill=prefill,
             )
 
         pickup = PickupRequest(
@@ -1749,7 +1899,9 @@ def book_a_pickup():
         )
         return redirect(url_for("book_a_pickup"))
 
-    return render_template("book_a_pickup.html", time_windows=PICKUP_TIME_WINDOWS, form={})
+    customer_id = session.get("customer_user_id")
+    prefill = CustomerUser.query.get(customer_id) if customer_id else None
+    return render_template("book_a_pickup.html", time_windows=PICKUP_TIME_WINDOWS, form={}, prefill=prefill)
 
 
 @app.route("/privacy-policy")
@@ -1890,8 +2042,10 @@ def checkout():
 
         return redirect(url_for("order_confirmation", order_number=order.order_number))
 
+    customer_id = session.get("customer_user_id")
+    prefill = CustomerUser.query.get(customer_id) if customer_id else None
     return render_template(
-        "checkout.html", items=items, subtotal=subtotal, tax=tax, total=total, hst_rate=HST_RATE,
+        "checkout.html", items=items, subtotal=subtotal, tax=tax, total=total, hst_rate=HST_RATE, prefill=prefill,
     )
 
 
@@ -2157,7 +2311,7 @@ def admin_mailbox_thread(thread_key):
     return render_template(
         "admin/mailbox_thread.html",
         messages=messages, thread_key=thread_key,
-        counterpart_name=counterpart_name, quick_replies=QUICK_REPLIES,
+        counterpart_name=counterpart_name,
     )
 
 
@@ -2197,7 +2351,7 @@ def admin_mailbox_compose():
             else:
                 flash("Message sent.", "success")
                 return redirect(url_for("admin_mailbox_thread", thread_key=to_email))
-    return render_template("admin/mailbox_compose.html", quick_replies=QUICK_REPLIES)
+    return render_template("admin/mailbox_compose.html")
 
 
 @app.route("/admin/orders")
@@ -3377,6 +3531,40 @@ def customer_login():
     if session.get("customer_user_id"):
         return redirect(url_for("customer_portal"))
     if request.method == "POST":
+        action = request.form.get("action", "login")
+
+        if action == "register":
+            # --- Self-registration ---
+            name = request.form.get("reg_name", "").strip()
+            email = request.form.get("reg_email", "").strip().lower()
+            password = request.form.get("reg_password", "")
+            confirm = request.form.get("reg_confirm", "")
+            errors = []
+            if not name:
+                errors.append("Full name is required.")
+            if not email or "@" not in email:
+                errors.append("A valid email address is required.")
+            if len(password) < 8:
+                errors.append("Password must be at least 8 characters.")
+            if password != confirm:
+                errors.append("Passwords do not match.")
+            if not errors and CustomerUser.query.filter_by(email=email).first():
+                errors.append("An account with that email already exists. Please log in.")
+            if errors:
+                for e in errors:
+                    flash(e, "error")
+                return render_template("customer/login.html", tab="register",
+                                       reg_name=name, reg_email=email)
+            user = CustomerUser(email=email, name=name, role="customer")
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            session["customer_user_id"] = user.id
+            session["customer_user_role"] = user.role
+            flash(f"Welcome, {user.name}! Your account has been created.", "success")
+            return redirect(url_for("customer_portal"))
+
+        # --- Normal login ---
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         user = CustomerUser.query.filter_by(email=email).first()
@@ -3389,8 +3577,89 @@ def customer_login():
             if next_url and next_url.startswith("/") and not next_url.startswith("//"):
                 return redirect(next_url)
             return redirect(url_for("customer_portal"))
-        flash("Incorrect email or password.", "error")
-    return render_template("customer/login.html")
+        if user and not user.is_active:
+            flash("Your account is inactive. Please contact us.", "error")
+        else:
+            flash("Incorrect email or password.", "error")
+    return render_template("customer/login.html", tab=request.args.get("tab", "login"))
+
+
+@app.route("/customer/forgot-password", methods=["GET", "POST"])
+def customer_forgot_password():
+    if session.get("customer_user_id"):
+        return redirect(url_for("customer_portal"))
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        user = CustomerUser.query.filter_by(email=email).first() if email else None
+        if user and user.is_active:
+            if not send_password_reset_email(user):
+                # SMTP isn't configured or the send failed -- _send_email
+                # already logged the reason. Tell the customer plainly
+                # rather than silently pretending it worked.
+                flash(
+                    "We couldn't send the reset email right now. Please contact us for help.",
+                    "error",
+                )
+                return render_template("customer/forgot_password.html")
+        # Same confirmation whether or not the address is registered, so
+        # this can't be used to check who has an account.
+        flash(
+            "If an account exists for that email address, we've sent a link to reset your password.",
+            "success",
+        )
+        return redirect(url_for("customer_login"))
+    return render_template("customer/forgot_password.html")
+
+
+@app.route("/customer/reset-password/<token>", methods=["GET", "POST"])
+def customer_reset_password(token):
+    if session.get("customer_user_id"):
+        return redirect(url_for("customer_portal"))
+    user = verify_password_reset_token(token)
+    if not user:
+        flash("That password reset link is invalid or has expired. Please request a new one.", "error")
+        return redirect(url_for("customer_forgot_password"))
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+        if len(password) < 8:
+            flash("Password must be at least 8 characters.", "error")
+        elif password != confirm:
+            flash("Passwords do not match.", "error")
+        else:
+            user.set_password(password)
+            db.session.commit()
+            flash("Your password has been reset. Please sign in.", "success")
+            return redirect(url_for("customer_login"))
+    return render_template("customer/reset_password.html", token=token)
+
+
+@app.route("/customer/profile", methods=["POST"])
+@customer_login_required
+def customer_profile_update():
+    user = CustomerUser.query.get(session["customer_user_id"])
+    name = request.form.get("name", "").strip()
+    phone = request.form.get("phone", "").strip()
+    address = request.form.get("address", "").strip()
+    new_password = request.form.get("new_password", "").strip()
+    confirm_password = request.form.get("confirm_password", "").strip()
+    if not name:
+        flash("Name cannot be empty.", "error")
+    else:
+        user.name = name
+        user.phone = phone or None
+        user.address = address or None
+        if new_password:
+            if len(new_password) < 8:
+                flash("New password must be at least 8 characters.", "error")
+                return redirect(url_for("customer_portal"))
+            if new_password != confirm_password:
+                flash("Passwords do not match.", "error")
+                return redirect(url_for("customer_portal"))
+            user.set_password(new_password)
+        db.session.commit()
+        flash("Profile updated successfully.", "success")
+    return redirect(url_for("customer_portal"))
 
 
 @app.route("/customer/logout")
@@ -3425,7 +3694,10 @@ def customer_portal():
 @owner_required
 def admin_users():
     users = CustomerUser.query.order_by(CustomerUser.created_at.desc()).all()
-    return render_template("admin/users.html", users=users, roles=CUSTOMER_USER_ROLES)
+    return render_template(
+        "admin/users.html", users=users,
+        total_pages=len(CUSTOMER_TOGGLEABLE_PAGES),
+    )
 
 
 @app.route("/admin/users/new", methods=["GET", "POST"])
@@ -3436,21 +3708,23 @@ def admin_user_new():
         email = request.form.get("email", "").strip().lower()
         name = request.form.get("name", "").strip()
         password = request.form.get("password", "")
-        role = request.form.get("role", "customer")
+        page_keys = request.form.getlist("pages")
         if not email or not name or not password:
             flash("Email, name, and password are required.", "error")
-        elif role not in CUSTOMER_USER_ROLES:
-            flash("Invalid role.", "error")
         elif CustomerUser.query.filter_by(email=email).first():
             flash("An account with that email already exists.", "error")
         else:
-            user = CustomerUser(email=email, name=name, role=role)
+            user = CustomerUser(email=email, name=name, role="customer")
             user.set_password(password)
+            user.set_allowed_page_keys(page_keys)
             db.session.add(user)
             db.session.commit()
             flash(f"Account created for {name}.", "success")
             return redirect(url_for("admin_users"))
-    return render_template("admin/user_form.html", user=None, roles=CUSTOMER_USER_ROLES)
+    return render_template(
+        "admin/user_form.html", user=None, pages=CUSTOMER_TOGGLEABLE_PAGES,
+        allowed_page_keys=CUSTOMER_TOGGLEABLE_PAGE_KEYS,
+    )
 
 
 @app.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])
@@ -3461,13 +3735,11 @@ def admin_user_edit(user_id):
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip().lower()
-        role = request.form.get("role", "customer")
         is_active = request.form.get("is_active") == "1"
         new_password = request.form.get("password", "").strip()
+        page_keys = request.form.getlist("pages")
         if not email or not name:
             flash("Email and name are required.", "error")
-        elif role not in CUSTOMER_USER_ROLES:
-            flash("Invalid role.", "error")
         else:
             conflict = CustomerUser.query.filter_by(email=email).first()
             if conflict and conflict.id != user_id:
@@ -3475,14 +3747,17 @@ def admin_user_edit(user_id):
             else:
                 user.name = name
                 user.email = email
-                user.role = role
                 user.is_active = is_active
+                user.set_allowed_page_keys(page_keys)
                 if new_password:
                     user.set_password(new_password)
                 db.session.commit()
                 flash("Account updated.", "success")
                 return redirect(url_for("admin_users"))
-    return render_template("admin/user_form.html", user=user, roles=CUSTOMER_USER_ROLES)
+    return render_template(
+        "admin/user_form.html", user=user, pages=CUSTOMER_TOGGLEABLE_PAGES,
+        allowed_page_keys=user.get_allowed_page_keys(),
+    )
 
 
 @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])

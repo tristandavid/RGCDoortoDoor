@@ -4,20 +4,54 @@
 
 <section class="section">
   <div class="container">
+
+    {# Header #}
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:2rem;">
       <div>
         <h2 style="margin:0;">Welcome, {{ user.name }}</h2>
         <p style="margin:.25rem 0 0; color:var(--text-muted);">
-          {{ user.email }} &nbsp;·&nbsp;
-          <span class="badge {% if user.role == 'admin' %}badge-published{% elif user.role == 'staff' %}badge-status{% else %}badge-pending{% endif %}">
-            {{ user.role_label }}
-          </span>
+          {{ user.email }}
         </p>
       </div>
       <a href="{{ url_for('customer_logout') }}" class="btn btn-outline">Sign Out</a>
     </div>
 
-    {# Orders Section #}
+    {# Quick Links — only shows pages this account actually has access to #}
+    {% set allowed = user.allowed_endpoints() %}
+    {% if allowed.intersection(['track', 'rates', 'contact_us', 'empty_box_sales', 'book_a_pickup']) %}
+    <div class="admin-card" style="margin-bottom:2rem;">
+      <h3 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:.75rem;">Quick Links</h3>
+      <div style="display:flex; flex-wrap:wrap; gap:.75rem;">
+        {% if 'track' in allowed %}
+        <a href="{{ url_for('track') }}" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:.4rem;">
+          📦 <span>Track a Package</span>
+        </a>
+        {% endif %}
+        {% if 'rates' in allowed %}
+        <a href="{{ url_for('rates') }}" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:.4rem;">
+          📋 <span>View Rates</span>
+        </a>
+        {% endif %}
+        {% if 'contact_us' in allowed %}
+        <a href="{{ url_for('contact_us') }}" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:.4rem;">
+          ✉ <span>Contact Us</span>
+        </a>
+        {% endif %}
+        {% if 'empty_box_sales' in allowed %}
+        <a href="{{ url_for('empty_box_sales') }}" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:.4rem;">
+          🛍 <span>Shop Boxes</span>
+        </a>
+        {% endif %}
+        {% if 'book_a_pickup' in allowed %}
+        <a href="{{ url_for('book_a_pickup') }}" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:.4rem;">
+          📅 <span>Book a Pickup</span>
+        </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# Orders #}
     <div class="admin-card" style="margin-bottom:2rem;">
       <h3 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:.75rem;">📦 My Orders</h3>
       {% if orders %}
@@ -50,15 +84,18 @@
           </table>
         </div>
       {% else %}
-        <p style="color:var(--text-muted); margin:0;">No orders yet. <a href="{{ url_for('empty_box_sales') }}">Shop now →</a></p>
+        <p style="color:var(--text-muted); margin:0;">
+          No orders yet.
+          {% if 'empty_box_sales' in allowed %}<a href="{{ url_for('empty_box_sales') }}">Shop now →</a>{% endif %}
+        </p>
       {% endif %}
     </div>
 
-    {# Pickups Section #}
+    {# Pickups #}
     <div class="admin-card" style="margin-bottom:2rem;">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
         <h3 style="margin:0;">📅 My Pickup Requests</h3>
-        <a href="{{ url_for('book_a_pickup') }}" class="btn btn-sm btn-primary">+ Book a Pickup</a>
+        {% if 'book_a_pickup' in allowed %}<a href="{{ url_for('book_a_pickup') }}" class="btn btn-sm btn-primary">+ Book a Pickup</a>{% endif %}
       </div>
       {% if pickups %}
         <div class="table-wrap">
@@ -86,19 +123,50 @@
           </table>
         </div>
       {% else %}
-        <p style="color:var(--text-muted); margin:0;">No pickup requests yet. <a href="{{ url_for('book_a_pickup') }}">Book one →</a></p>
+        <p style="color:var(--text-muted); margin:0;">
+          No pickup requests yet.
+          {% if 'book_a_pickup' in allowed %}<a href="{{ url_for('book_a_pickup') }}">Book one →</a>{% endif %}
+        </p>
       {% endif %}
     </div>
 
-    {# Quick Links #}
+    {# Profile edit #}
     <div class="admin-card">
-      <h3 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:.75rem;">Quick Links</h3>
-      <div style="display:flex; flex-wrap:wrap; gap:.75rem;">
-        <a href="{{ url_for('track') }}" class="btn btn-outline">📦 Track a Package</a>
-        <a href="{{ url_for('rates') }}" class="btn btn-outline">📋 View Rates</a>
-        <a href="{{ url_for('contact_us') }}" class="btn btn-outline">✉ Contact Us</a>
-        <a href="{{ url_for('empty_box_sales') }}" class="btn btn-outline">🛍 Shop Boxes</a>
-      </div>
+      <h3 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:.75rem;">👤 My Profile</h3>
+      <p style="color:var(--text-muted); margin-top:0; font-size:.9rem;">
+        Keep your details up to date — they'll be pre-filled whenever you book a pickup, place an order, or send us a message.
+      </p>
+      <form method="post" action="{{ url_for('customer_profile_update') }}" class="admin-form" style="max-width:480px;">
+        <div>
+          <label for="pf-name">Full Name *</label>
+          <input type="text" id="pf-name" name="name" required value="{{ user.name }}">
+        </div>
+        <div>
+          <label for="pf-email">Email</label>
+          <input type="email" id="pf-email" value="{{ user.email }}" disabled
+                 style="background:var(--bg-alt); color:var(--text-muted);">
+          <p style="font-size:.82rem; color:var(--text-muted); margin:.3rem 0 0;">Email cannot be changed here. Contact us if you need to update it.</p>
+        </div>
+        <div>
+          <label for="pf-phone">Phone Number</label>
+          <input type="tel" id="pf-phone" name="phone" value="{{ user.phone or '' }}" placeholder="(555) 555-5555">
+        </div>
+        <div>
+          <label for="pf-address">Default Address</label>
+          <textarea id="pf-address" name="address" placeholder="Street, city, postal code">{{ user.address or '' }}</textarea>
+        </div>
+        <hr style="border:none; border-top:1px solid var(--border); margin:1rem 0;">
+        <p style="font-weight:600; margin:0 0 .75rem;">Change Password <span style="font-weight:400; color:var(--text-muted);">(leave blank to keep current)</span></p>
+        <div>
+          <label for="pf-newpw">New Password</label>
+          <input type="password" id="pf-newpw" name="new_password" autocomplete="new-password" minlength="8" placeholder="Min. 8 characters">
+        </div>
+        <div>
+          <label for="pf-confirmpw">Confirm New Password</label>
+          <input type="password" id="pf-confirmpw" name="confirm_password" autocomplete="new-password" minlength="8">
+        </div>
+        <button type="submit" class="btn btn-primary">Save Profile</button>
+      </form>
     </div>
 
   </div>

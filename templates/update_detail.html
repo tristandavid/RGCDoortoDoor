@@ -10,13 +10,32 @@
 </div>
 
 <section class="section">
-  <div class="container" style="max-width:760px;">
+  <div class="container" style="max-width:760px; margin-left:auto; margin-right:auto;">
     {% if post.image_url %}
       <img src="{{ post.image_url }}" alt="" style="width:100%; border-radius:14px; margin-bottom:26px;">
     {% endif %}
-    <p style="white-space:pre-line; line-height:1.7; font-size:1.05rem;">{{ post.body }}</p>
-    <a href="{{ url_for('updates') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary); margin-top:20px;">&larr; Back to Updates</a>
+    {# Render rich HTML from Quill; fall back gracefully for plain-text posts #}
+    {% if '<' in post.body %}
+      <div class="blog-body" style="line-height:1.8; font-size:1.05rem;">
+        {{ post.body | safe }}
+      </div>
+    {% else %}
+      <p style="white-space:pre-line; line-height:1.8; font-size:1.05rem;">{{ post.body }}</p>
+    {% endif %}
+    <a href="{{ url_for('updates') }}" class="btn btn-outline"
+       style="color:var(--primary); border-color:var(--primary); margin-top:2rem; display:inline-block;">&larr; Back to Updates</a>
   </div>
 </section>
+
+<style>
+/* Style Quill-generated HTML consistently */
+.blog-body h1, .blog-body h2, .blog-body h3 { margin-top:1.5rem; margin-bottom:.5rem; }
+.blog-body p { margin-bottom:1rem; }
+.blog-body ul, .blog-body ol { padding-left:1.5rem; margin-bottom:1rem; }
+.blog-body li { margin-bottom:.35rem; }
+.blog-body a { color:var(--primary); }
+.blog-body blockquote { border-left:4px solid var(--primary); padding-left:1rem; color:var(--text-muted); margin:1rem 0; }
+.blog-body img { max-width:100%; border-radius:8px; }
+</style>
 
 {% endblock %}

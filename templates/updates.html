@@ -10,21 +10,31 @@
 </div>
 
 <section class="section">
-  <div class="container">
-    <div class="grid-2">
-      {% for post in posts %}
-        <a href="{{ url_for('update_detail', post_id=post.id) }}" class="card" style="display:block;">
-          {% if post.image_url %}
-            <img src="{{ post.image_url }}" alt="" style="width:100%; border-radius:10px; margin-bottom:16px; max-height:220px; object-fit:cover;">
-          {% endif %}
-          <h3>{{ post.title }}</h3>
-          <p>{{ post.body[:180] }}{% if post.body|length > 180 %}&hellip;{% endif %}</p>
-          <p style="color:var(--text-muted); font-size:0.85rem; margin-top:12px;">{{ post.created_at.strftime('%B %d, %Y') }}</p>
-        </a>
-      {% else %}
-        <p>No updates posted yet &mdash; check back soon!</p>
-      {% endfor %}
-    </div>
+  <div class="container" style="max-width:900px; margin-left:auto; margin-right:auto;">
+    {% if posts %}
+      <div style="display:flex; flex-direction:column; gap:2rem;">
+        {% for post in posts %}
+          <a href="{{ url_for('update_detail', post_id=post.id) }}"
+             class="card" style="display:block; text-decoration:none; transition:box-shadow .18s;">
+            {% if post.image_url %}
+              <img src="{{ post.image_url }}" alt=""
+                   style="width:100%; border-radius:10px; margin-bottom:1rem; max-height:320px; object-fit:cover;">
+            {% endif %}
+            <h3 style="margin-top:0;">{{ post.title }}</h3>
+            <p style="color:var(--text-muted); margin:0 0 .5rem; font-size:.85rem;">
+              {{ post.created_at.strftime('%B %d, %Y') }}
+            </p>
+            {# Strip HTML tags for the preview snippet #}
+            <p style="margin:0; color:var(--text);">
+              {{ post.body | striptags | truncate(200) }}
+            </p>
+            <p style="margin:.75rem 0 0; color:var(--primary); font-weight:600; font-size:.9rem;">Read more →</p>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p style="text-align:center; color:var(--text-muted);">No updates posted yet &mdash; check back soon!</p>
+    {% endif %}
   </div>
 </section>
 

@@ -2,18 +2,49 @@
 {% block title %}{{ 'Edit Post' if post else 'New Post' }} | {{ company.name }}{% endblock %}
 {% block page_title %}{{ 'Edit Post' if post else 'New Post' }}{% endblock %}
 {% block page_subtitle %}<p>Share an announcement, promotion, or news update with your customers</p>{% endblock %}
+
+{% block head_extra %}
+<!-- Quill rich text editor -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet">
+<style>
+  #quill-editor {
+    background: #fff;
+    border-radius: 0 0 6px 6px;
+    font-size: 1rem;
+    min-height: 280px;
+    max-height: 600px;
+    overflow-y: auto;
+  }
+  .ql-toolbar.ql-snow {
+    border-radius: 6px 6px 0 0;
+    border-color: var(--border);
+    background: var(--bg-alt);
+  }
+  .ql-container.ql-snow {
+    border-color: var(--border);
+    border-radius: 0 0 6px 6px;
+  }
+  .ql-editor { min-height: 280px; }
+</style>
+{% endblock %}
+
 {% block admin_content %}
 
 <div class="admin-card">
-  <form class="admin-form" method="post" enctype="multipart/form-data">
+  <form class="admin-form" method="post" enctype="multipart/form-data" id="post-form">
     <div>
       <label for="title">Title</label>
       <input type="text" id="title" name="title" value="{{ post.title if post else '' }}" required>
     </div>
+
     <div>
-      <label for="body">Body</label>
-      <textarea id="body" name="body" required>{{ post.body if post else '' }}</textarea>
+      <label>Body</label>
+      {# Hidden textarea — submitted to Flask; Quill writes HTML into it #}
+      <textarea id="body" name="body" style="display:none;">{{ post.body if post else '' }}</textarea>
+      {# Quill editor mounts here #}
+      <div id="quill-editor"></div>
     </div>
+
     <div>
       <label for="image">Image (optional)</label>
       {% if post and post.image_url %}
@@ -22,15 +53,54 @@
       {% endif %}
       <input type="file" id="image" name="image" accept=".png,.jpg,.jpeg,.gif,.webp">
     </div>
+
     <div class="checkbox-row">
       <input type="checkbox" id="is_published" name="is_published" {% if not post or post.is_published %}checked{% endif %}>
       <label for="is_published" style="font-weight:600;">Published (visible on the public Updates page)</label>
     </div>
+
     <div>
       <button type="submit" class="btn btn-primary">{{ 'Save Changes' if post else 'Create Post' }}</button>
       <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary); margin-left:10px;">Cancel</a>
     </div>
   </form>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
+<script>
+(function () {
+  var quill = new Quill('#quill-editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        [{ header: [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ color: [] }, { background: [] }],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        [{ align: [] }],
+        ['link', 'image'],
+        ['blockquote', 'code-block'],
+        ['clean']
+      ]
+    }
+  });
+
+  // Load existing content into Quill
+  var existing = document.getElementById('body').value;
+  if (existing) {
+    // If it's already HTML (has tags), use dangerouslyPasteHTML; otherwise treat as plain text
+    if (existing.trim().startsWith('<')) {
+      quill.root.innerHTML = existing;
+    } else {
+      quill.setText(existing);
+    }
+  }
+
+  // Before form submit, copy Quill HTML into the hidden textarea
+  document.getElementById('post-form').addEventListener('submit', function () {
+    document.getElementById('body').value = quill.root.innerHTML;
+  });
+})();
+</script>
 
 {% endblock %}

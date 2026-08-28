@@ -20,22 +20,21 @@
     </div>
 
     <div>
-      <label for="role">Role <span style="color:var(--danger)">*</span></label>
-      <select id="role" name="role">
-        {% for role in roles %}
-          <option value="{{ role }}"
-            {% if user and user.role == role %}selected
-            {% elif not user and request.form.get('role') == role %}selected
-            {% endif %}>
-            {{ role|title }}
-          </option>
-        {% endfor %}
-      </select>
-      <p class="field-hint" style="margin:.35rem 0 0; font-size:.83rem; color:var(--text-muted);">
-        <strong>Customer</strong> — portal access only (orders &amp; pickups).
-        <strong>Staff</strong> — same as customer, no page restrictions.
-        <strong>Admin</strong> — full site access (same as staff on public site; can also access admin panel if given admin credentials separately).
+      <label>Page Access</label>
+      <p class="field-hint" style="margin:0 0 .5rem; font-size:.83rem; color:var(--text-muted);">
+        Choose which pages this customer can browse while signed in. Their account, cart/checkout,
+        and legal pages are always available regardless of what's checked here.
       </p>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:.5rem .75rem; border:1px solid var(--border); border-radius:8px; padding:.75rem;">
+        {% for key, label, _endpoints in pages %}
+          <label style="display:flex; align-items:center; gap:.4rem; cursor:pointer; font-weight:400;">
+            <input type="checkbox" name="pages" value="{{ key }}"
+                   {% if key in allowed_page_keys %}checked{% endif %}
+                   style="width:auto; margin:0;">
+            {{ label }}
+          </label>
+        {% endfor %}
+      </div>
     </div>
 
     <div>

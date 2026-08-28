@@ -7,13 +7,6 @@
 <a href="{{ url_for('admin_mailbox') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary); margin-bottom:20px; display:inline-block;">&larr; Back to Mailbox</a>
 
 <div class="admin-card" style="max-width:760px;">
-  <div class="admin-actions" style="margin-bottom:12px; flex-wrap:wrap;">
-    {% for label, text in quick_replies %}
-      <button type="button" class="btn btn-small btn-outline quick-reply-btn" style="color:var(--primary); border-color:var(--primary);"
-              data-reply-target="compose-body" data-reply-text="{{ text }}">{{ label }}</button>
-    {% endfor %}
-  </div>
-
   <form class="admin-form" method="post">
     <div>
       <label for="to_email">To (email address)</label>
