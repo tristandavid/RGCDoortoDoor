@@ -29,6 +29,13 @@
       {# LOGIN FORM #}
       <div id="panel-login" {% if tab == 'register' %}style="display:none;"{% endif %}>
         <p style="color:var(--text-muted); margin-top:0;">Sign in to view your orders and manage pickups.</p>
+        {% if google_signin_enabled %}
+          <a href="{{ url_for('customer_login_google', next=request.args.get('next')) }}" class="google-signin-btn">
+            {% include "customer/_google_icon.html" %}
+            <span>Sign in with Google</span>
+          </a>
+          <div class="login-divider"><span>or</span></div>
+        {% endif %}
         <form method="post" class="admin-form">
           <input type="hidden" name="action" value="login">
           <div>
@@ -54,6 +61,13 @@
       {# REGISTER FORM #}
       <div id="panel-register" {% if tab != 'register' %}style="display:none;"{% endif %}>
         <p style="color:var(--text-muted); margin-top:0;">Create a free account to track orders and book pickups.</p>
+        {% if google_signin_enabled %}
+          <a href="{{ url_for('customer_login_google', next=request.args.get('next')) }}" class="google-signin-btn">
+            {% include "customer/_google_icon.html" %}
+            <span>Sign up with Google</span>
+          </a>
+          <div class="login-divider"><span>or</span></div>
+        {% endif %}
         <form method="post" class="admin-form">
           <input type="hidden" name="action" value="register">
           <div>

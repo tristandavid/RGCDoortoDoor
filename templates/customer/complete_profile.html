@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Complete Your Profile | {{ company.name }}{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container">
+    <div class="login-box" style="max-width:460px;">
+
+      <h2 style="margin-top:0;">Welcome, {{ user.name }}!</h2>
+      <p style="color:var(--text-muted);">
+        Just one more step — add a phone number and address so we can pre-fill your pickups and
+        orders. You can update these any time from My Profile.
+      </p>
+
+      <form method="post" class="admin-form">
+        <div>
+          <label for="phone">Phone Number</label>
+          <input type="tel" id="phone" name="phone" required autofocus placeholder="(555) 555-5555"
+                 value="{{ request.form.get('phone', '') }}">
+        </div>
+        <div>
+          <label for="address">Address</label>
+          <textarea id="address" name="address" required placeholder="Street, city, postal code">{{ request.form.get('address', '') }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:.25rem;">Continue</button>
+      </form>
+
+    </div>
+  </div>
+</section>
+
+{% endblock %}

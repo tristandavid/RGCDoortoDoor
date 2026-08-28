@@ -8,6 +8,8 @@ import smtplib
 import string
 import threading
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from datetime import datetime, timedelta
@@ -81,13 +83,22 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme123")
 
-# --- A second, restricted login for whoever maintains the site (developer/
-# technical support), separate from the owner's account above -------------
+# --- A second, FULL admin login (e.g. a co-owner or manager) ---------------
 # Unset by default (both env vars blank) — this login doesn't exist at all
-# until you set BOTH CREATOR_USERNAME and CREATOR_PASSWORD. There's no
+# until you set BOTH ADMIN2_USERNAME and ADMIN2_PASSWORD. There's no
 # insecure default like ADMIN_PASSWORD's "changeme123" here on purpose: a
 # second admin door should never be open unless someone deliberately opened
-# it.
+# it. Once configured, this account has the exact same access as the owner
+# login above — everything, including Orders/Invoices/Mailbox/Pickups/
+# Subscribers/Users (see ADMIN_ACCOUNTS' "full_access" below). It gets its
+# own separate two-factor enrollment, same as every other account here.
+ADMIN2_USERNAME = os.environ.get("ADMIN2_USERNAME", "")
+ADMIN2_PASSWORD = os.environ.get("ADMIN2_PASSWORD", "")
+
+# --- A third, RESTRICTED login for whoever maintains the site (developer/
+# technical support), separate from the two full-access accounts above ----
+# Unset by default (both env vars blank) — this login doesn't exist at all
+# until you set BOTH CREATOR_USERNAME and CREATOR_PASSWORD.
 #
 # This account can do everything technical/content-related (Updates,
 # Products, Pages, Settings — including its own two-factor setup) but is
@@ -100,34 +111,63 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme123")
 CREATOR_USERNAME = os.environ.get("CREATOR_USERNAME", "")
 CREATOR_PASSWORD = os.environ.get("CREATOR_PASSWORD", "")
 
+# Central registry of every admin login this app recognizes: identity ->
+# username/password/display label/full-access flag. _match_admin_credentials,
+# ADMIN_ROLES_FULL_ACCESS, and every other place that used to hardcode
+# "owner" vs. "creator" now key off this instead, so adding another login
+# later (or changing who has full access) is a one-line change here, not a
+# hunt through the file. An account with a blank username/password (the
+# default for ADMIN2_* and CREATOR_*) simply doesn't match any login attempt
+# — see _match_admin_credentials.
+ADMIN_ACCOUNTS = {
+    "owner": {
+        "username": ADMIN_USERNAME, "password": ADMIN_PASSWORD,
+        "label": "Owner", "full_access": True,
+    },
+    "admin2": {
+        "username": ADMIN2_USERNAME, "password": ADMIN2_PASSWORD,
+        "label": "Admin 2", "full_access": True,
+    },
+    "creator": {
+        "username": CREATOR_USERNAME, "password": CREATOR_PASSWORD,
+        "label": "Creator", "full_access": False,
+    },
+}
+
 
 def _match_admin_credentials(username, password):
-    """Checks `username`/`password` against both configured admin logins
-    and returns the identity string ("owner" or "creator") of whichever one
-    matched, or None if neither did. That identity is what everything else
-    in this file keys off of: session["admin_identity"] / the "id" claim in
-    the mobile token (see admin_login/api_login below), which account's MFA
-    Setting rows apply (see verify_mfa_code and friends), and which routes
-    are allowed (see owner_required/api_owner_required)."""
-    if secrets.compare_digest(username, ADMIN_USERNAME) and secrets.compare_digest(password, ADMIN_PASSWORD):
-        return "owner"
-    if (
-        CREATOR_USERNAME and CREATOR_PASSWORD
-        and secrets.compare_digest(username, CREATOR_USERNAME)
-        and secrets.compare_digest(password, CREATOR_PASSWORD)
-    ):
-        return "creator"
+    """Checks `username`/`password` against every configured account in
+    ADMIN_ACCOUNTS and returns the identity string of whichever one
+    matched, or None if neither did (or if `username`/`password` are
+    blank — a blank ADMIN2_USERNAME/CREATOR_USERNAME means that slot isn't
+    configured at all, never "log in with an empty username"). That
+    identity is what everything else in this file keys off of:
+    session["admin_identity"] / the "id" claim in the mobile token (see
+    admin_login/api_login below), which account's MFA Setting rows apply
+    (see verify_mfa_code and friends), and which routes are allowed (see
+    owner_required/api_owner_required)."""
+    if not username or not password:
+        return None
+    for identity, account in ADMIN_ACCOUNTS.items():
+        acct_username, acct_password = account["username"], account["password"]
+        if not acct_username or not acct_password:
+            continue  # this login slot isn't configured
+        if secrets.compare_digest(username, acct_username) and secrets.compare_digest(password, acct_password):
+            return identity
     return None
 
 
 # Identities allowed past owner_required/api_owner_required, i.e. allowed to
-# touch Orders/Invoices/Mailbox/Pickups/Subscribers. Only "owner" by
-# default; add "creator" here if you'd rather that account have full access
-# instead of the technical-only slice described above.
-ADMIN_ROLES_FULL_ACCESS = {"owner"}
+# touch Orders/Invoices/Mailbox/Pickups/Subscribers/Users — every identity
+# in ADMIN_ACCOUNTS flagged "full_access": True (owner and admin2 by
+# default). Add "creator" to ADMIN_ACCOUNTS' "full_access" instead of
+# editing this line if you'd rather that account have full access too.
+ADMIN_ROLES_FULL_ACCESS = {
+    identity for identity, account in ADMIN_ACCOUNTS.items() if account["full_access"]
+}
 
 # --- Two-factor authentication (TOTP), optional -----------------------------
-# Off by default — nothing changes for either account until it turns MFA on
+# Off by default — nothing changes for any account until it turns MFA on
 # from its own Admin > Site Settings. Once enabled for an account it's
 # required on BOTH the web login (/admin/login) and the mobile app login
 # (/api/v1/login) for that account specifically.
@@ -135,9 +175,10 @@ ADMIN_ROLES_FULL_ACCESS = {"owner"}
 # State lives in the Setting key/value table (see the Setting model), not an
 # env var like ADMIN_PASSWORD, because it needs to be turned on/off — and the
 # secret regenerated — from the admin UI without a server restart or
-# redeploy. Every key below is namespaced by admin identity ("owner" or
-# "creator" — see _match_admin_credentials) so the two accounts each enroll
-# their own authenticator app and never see each other's codes:
+# redeploy. Every key below is namespaced by admin identity (one of the keys
+# in ADMIN_ACCOUNTS — "owner", "admin2", "creator" — see
+# _match_admin_credentials) so each configured account enrolls its own
+# authenticator app and never sees another account's codes:
 #   mfa_enabled:<identity>               "1" once enrollment is confirmed
 #                                         with a real code, unset otherwise
 #   mfa_totp_secret:<identity>           the ACTIVE base32 TOTP secret for
@@ -155,14 +196,15 @@ ADMIN_ROLES_FULL_ACCESS = {"owner"}
 #                                         at enrollment (see
 #                                         generate_backup_codes)
 #
-# LOCKOUT RECOVERY: there's no "forgot your code" flow for either account.
-# If one of them loses their authenticator app AND their backup codes, the
-# only way back in is direct database access — connect to the DB (see
-# deploy/) and run, e.g. for the owner:
+# LOCKOUT RECOVERY: there's no "forgot your code" flow for any admin
+# account. If one of them loses their authenticator app AND their backup
+# codes, the only way back in is direct database access — connect to the DB
+# (see deploy/) and run, e.g. for the owner:
 #   UPDATE setting SET value = '0' WHERE key = 'mfa_enabled:owner';
-# (substitute 'mfa_enabled:creator' for the other account; or just delete
-# the row). That's the exact same trust model as forgetting ADMIN_PASSWORD
-# or CREATOR_PASSWORD, just one row over.
+# (substitute 'mfa_enabled:admin2' or 'mfa_enabled:creator' for the other
+# accounts; or just delete the row). That's the exact same trust model as
+# forgetting ADMIN_PASSWORD, ADMIN2_PASSWORD, or CREATOR_PASSWORD, just one
+# row over.
 
 # --- Mobile app API (companion Android manager app) -------------------------
 # The Android app doesn't use the browser session cookie above — it signs in
@@ -186,6 +228,40 @@ _mobile_token_serializer = URLSafeTimedSerializer(app.secret_key, salt="rgc-mobi
 # way. Sent by email via _send_email, same SMTP plumbing as everything else.
 PASSWORD_RESET_MAX_AGE_SECONDS = 60 * 60  # 1 hour
 _password_reset_serializer = URLSafeTimedSerializer(app.secret_key, salt="rgc-customer-password-reset")
+
+# --- "Sign in with Google" for the customer portal ---------------------------
+# Off by default — the login page's Google button only shows up once BOTH
+# GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set. Get these from a
+# project in the Google Cloud Console (APIs & Services > Credentials >
+# OAuth client ID, type "Web application"), with this exact redirect URI
+# authorized: <your site's base URL>/customer/login/google/callback
+# (e.g. https://rgcdoortodoorboxservices.ca/customer/login/google/callback).
+#
+# This uses plain OAuth 2.0 "authorization code" flow by hand (urllib, no
+# extra dependency) rather than verifying a signed ID token: after Google
+# redirects back with a one-time `code`, customer_login_google_callback
+# exchanges it server-to-server for an access token, then calls Google's
+# userinfo endpoint with that token to get the person's email/name. Google
+# itself is what authenticated them; we never see or store a password.
+#
+# First-time sign-in creates a new CustomerUser (role "customer", a random
+# unusable password so "forgot password" can still recover the account
+# later if they ever want email/password login too) with
+# needs_profile_details=True, which forces them through
+# customer_complete_profile (phone + address) before anything else — see
+# enforce_customer_page_restrictions. Matching an EXISTING account is by
+# email only (same lookup a normal login uses); google_id is just a record
+# of how the account was created, not a separate lookup key.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_OAUTH_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+
+
+def google_signin_enabled():
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+
 
 db = SQLAlchemy(app)
 
@@ -681,7 +757,7 @@ ADMIN_SECTIONS = [
      {"admin_products", "admin_product_new", "admin_product_edit"}),
     ("📄", "Pages", "admin_pages", {"admin_pages", "admin_page_edit"}),
     ("⚙️", "Settings", "admin_settings",
-     {"admin_settings", "admin_settings_mfa_setup", "admin_settings_mfa_backup_codes"}),
+     {"admin_settings", "admin_settings_mfa_setup"}),
 ]
 
 # Sidebar sections hidden from the creator's technical-only account —
@@ -733,9 +809,11 @@ def inject_globals():
         ),
         "admin_identity": admin_identity if is_admin_logged_in else None,
         "is_owner_account": is_owner_account,
+        "admin_account_label": _admin_account_label(admin_identity) if is_admin_logged_in else None,
         "admin_sections": visible_admin_sections if is_admin_logged_in else ADMIN_SECTIONS,
         "admin_section": admin_section,
         "current_customer": current_customer,
+        "google_signin_enabled": google_signin_enabled(),
     }
 
 
@@ -1077,6 +1155,7 @@ CUSTOMER_ALWAYS_ALLOWED_ENDPOINTS = {
     # customer portal / auth endpoints
     "customer_portal", "customer_logout", "customer_login", "customer_register",
     "customer_profile_update", "customer_forgot_password", "customer_reset_password",
+    "customer_login_google", "customer_login_google_callback", "customer_complete_profile",
     # static files, etc.
     "static",
 }
@@ -1130,6 +1209,17 @@ class CustomerUser(db.Model):
     # page allowed" (see get_allowed_page_keys) so existing accounts aren't
     # suddenly locked out the moment this column appears.
     allowed_pages = db.Column(db.Text, nullable=True)
+    # Set once a customer signs in with Google (see customer_login_google_*
+    # below); NULL for accounts created by the normal email/password form.
+    # Not used for lookup (email is still the unique key both paths share)
+    # -- just a record of how the account was created.
+    google_id = db.Column(db.String(64), nullable=True, index=True)
+    # True only for a brand-new Google sign-up, until they fill in the
+    # profile-completion form (phone + address) — see
+    # customer_complete_profile and enforce_customer_page_restrictions.
+    # Accounts created the normal way never need this (they can add
+    # phone/address whenever they like from My Profile).
+    needs_profile_details = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def set_password(self, password):
@@ -1351,6 +1441,8 @@ with app.app_context():
     _ensure_column("customer_user", "phone", "VARCHAR(50)")
     _ensure_column("customer_user", "address", "VARCHAR(400)")
     _ensure_column("customer_user", "allowed_pages", "TEXT")
+    _ensure_column("customer_user", "google_id", "VARCHAR(64)")
+    _ensure_column("customer_user", "needs_profile_details", "BOOLEAN DEFAULT FALSE")
     # The "staff"/"admin" CustomerUser roles have been removed — every
     # account on the public portal is a "customer" now, with page access
     # controlled individually via allowed_pages instead. Any pre-existing
@@ -1725,7 +1817,9 @@ def enforce_customer_page_restrictions():
     """If a logged-in customer tries to access a page outside their own
     allowed_endpoints() (see CustomerUser above — the always-allowed floor
     plus whatever pages the admin granted them), redirect them to their
-    portal.
+    portal. Separately, a brand-new Google sign-up (needs_profile_details)
+    is held on the profile-completion form until they've given us a phone
+    number and address, before they can go anywhere else at all.
 
     Admin routes (/admin/*, /api/*) are always skipped — they have their
     own session guard and the customer session is irrelevant there.
@@ -1746,6 +1840,8 @@ def enforce_customer_page_restrictions():
     user = CustomerUser.query.get(user_id)
     if not user or not user.is_active:
         return
+    if user.needs_profile_details and endpoint not in {"customer_complete_profile", "customer_logout"}:
+        return redirect(url_for("customer_complete_profile"))
     if endpoint not in user.allowed_endpoints():
         flash("You don't have permission to view that page.", "error")
         return redirect(url_for("customer_portal"))
@@ -2743,6 +2839,12 @@ def admin_settings():
         "admin/settings.html",
         social_platforms=SOCIAL_PLATFORMS,
         mfa_enabled=mfa_is_enabled(session.get("admin_identity", "owner")),
+        # Freshly (re)generated backup codes, shown exactly once, right here
+        # on Settings — see admin_settings_mfa_setup and
+        # admin_settings_mfa_regenerate_backup_codes. Popped from the
+        # session so a page reload never shows them twice; the plaintext is
+        # never stored anywhere retrievable after this, only its hash.
+        new_backup_codes=session.pop("mfa_new_backup_codes", None),
     )
 
 
@@ -2791,7 +2893,11 @@ def admin_settings_mfa_enable():
 
 
 def _admin_display_username(identity):
-    return ADMIN_USERNAME if identity == "owner" else CREATOR_USERNAME
+    return ADMIN_ACCOUNTS.get(identity, {}).get("username") or ADMIN_USERNAME
+
+
+def _admin_account_label(identity):
+    return ADMIN_ACCOUNTS.get(identity, {}).get("label") or identity.capitalize()
 
 
 @app.route("/admin/settings/mfa/setup", methods=["GET", "POST"])
@@ -2810,14 +2916,14 @@ def admin_settings_mfa_setup():
             set_setting(_mfa_setting_key("mfa_totp_secret_pending", identity), None)
             session["mfa_new_backup_codes"] = generate_backup_codes(identity)
             flash("Two-factor authentication is on.", "success")
-            return redirect(url_for("admin_settings_mfa_backup_codes"))
+            return redirect(url_for("admin_settings"))
         flash("That code didn't match — double check the time on your phone and try again.", "error")
-    # Distinguishing issuer names ("... — Owner" / "... — Creator") so the
-    # two accounts show up as separate entries in an authenticator app that
-    # ends up holding both.
+    # Distinguishing issuer names ("... — Owner" / "... — Admin 2" / "...
+    # — Creator") so each configured account shows up as a separate entry
+    # in an authenticator app that ends up holding more than one of them.
     provisioning_uri = _totp_for_secret(pending_secret).provisioning_uri(
         name=_admin_display_username(identity),
-        issuer_name=f"{COMPANY['name']} — {identity.capitalize()}",
+        issuer_name=f"{COMPANY['name']} — {_admin_account_label(identity)}",
     )
     return render_template(
         "admin/mfa_setup.html", secret=pending_secret, provisioning_uri=provisioning_uri,
@@ -2833,7 +2939,7 @@ def admin_settings_mfa_qr():
         abort(404)
     uri = _totp_for_secret(pending_secret).provisioning_uri(
         name=_admin_display_username(identity),
-        issuer_name=f"{COMPANY['name']} — {identity.capitalize()}",
+        issuer_name=f"{COMPANY['name']} — {_admin_account_label(identity)}",
     )
     img = qrcode.make(uri)
     buf = io.BytesIO()
@@ -2849,31 +2955,20 @@ def admin_settings_mfa_setup_cancel():
     return redirect(url_for("admin_settings"))
 
 
-@app.route("/admin/settings/mfa/backup-codes")
-@login_required
-def admin_settings_mfa_backup_codes():
-    """Shows freshly generated backup codes exactly once, right after
-    they're created (by admin_settings_mfa_setup or
-    admin_settings_mfa_regenerate_backup_codes, which stash them in the
-    session just for this one view). Reloading this page after that
-    session value is gone just bounces back to Settings — the plaintext
-    codes are never stored anywhere retrievable, only their hashes."""
-    codes = session.pop("mfa_new_backup_codes", None)
-    if not codes:
-        flash("Backup codes are only shown once, right after they're generated.", "error")
-        return redirect(url_for("admin_settings"))
-    return render_template("admin/mfa_backup_codes.html", codes=codes)
-
-
 @app.route("/admin/settings/mfa/backup-codes/regenerate", methods=["POST"])
 @login_required
 def admin_settings_mfa_regenerate_backup_codes():
+    """Regenerates this account's backup codes and sends them straight back
+    to Settings — admin_settings() below pops them out of the session and
+    shows them once, inline, in the Two-Factor Authentication card (see the
+    note above generate_backup_codes about why there's no way to show them
+    again after that)."""
     identity = session.get("admin_identity", "owner")
     if not mfa_is_enabled(identity):
         return redirect(url_for("admin_settings"))
     session["mfa_new_backup_codes"] = generate_backup_codes(identity)
     flash("New backup codes generated — your old ones no longer work.", "success")
-    return redirect(url_for("admin_settings_mfa_backup_codes"))
+    return redirect(url_for("admin_settings"))
 
 
 @app.route("/admin/settings/mfa/disable", methods=["POST"])
@@ -2881,12 +2976,11 @@ def admin_settings_mfa_regenerate_backup_codes():
 def admin_settings_mfa_disable():
     """Requires the current password again (not just today's already-open
     session) as a speed bump against someone at an unlocked screen turning
-    2FA off. Checked against whichever account (owner or creator) is
-    currently logged in."""
+    2FA off. Checked against whichever account is currently logged in."""
     identity = session.get("admin_identity", "owner")
     password = request.form.get("password", "")
-    expected_password = ADMIN_PASSWORD if identity == "owner" else CREATOR_PASSWORD
-    if not secrets.compare_digest(password, expected_password):
+    expected_password = ADMIN_ACCOUNTS.get(identity, {}).get("password", "")
+    if not expected_password or not secrets.compare_digest(password, expected_password):
         flash("Incorrect password — two-factor authentication was not disabled.", "error")
         return redirect(url_for("admin_settings"))
     set_setting(_mfa_setting_key("mfa_enabled", identity), None)
@@ -3634,6 +3728,138 @@ def customer_reset_password(token):
     return render_template("customer/reset_password.html", token=token)
 
 
+@app.route("/customer/login/google")
+def customer_login_google():
+    """Step 1 of "Sign in with Google": send the browser to Google's
+    consent screen. See the big comment above GOOGLE_CLIENT_ID for the
+    overall flow and setup."""
+    if session.get("customer_user_id"):
+        return redirect(url_for("customer_portal"))
+    if not google_signin_enabled():
+        abort(404)
+    state = secrets.token_urlsafe(24)
+    session["google_oauth_state"] = state
+    # Preserve ?next=... across the round trip to Google the same way the
+    # normal login form does, so "sign in to continue" links still land
+    # the customer back where they started.
+    next_url = request.args.get("next")
+    if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+        session["google_oauth_next"] = next_url
+    else:
+        session.pop("google_oauth_next", None)
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": url_for("customer_login_google_callback", _external=True),
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "prompt": "select_account",
+    }
+    return redirect(f"{GOOGLE_OAUTH_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}")
+
+
+@app.route("/customer/login/google/callback")
+def customer_login_google_callback():
+    """Step 2: Google sends the browser back here with a one-time `code`
+    (or an `error` if the person cancelled/denied consent). Exchanges that
+    code for an access token server-to-server, then calls Google's
+    userinfo endpoint with it to find out who signed in — see the comment
+    above GOOGLE_CLIENT_ID."""
+    if not google_signin_enabled():
+        abort(404)
+    expected_state = session.pop("google_oauth_state", None)
+    next_url = session.pop("google_oauth_next", None)
+    got_state = request.args.get("state")
+    if not expected_state or not got_state or not secrets.compare_digest(expected_state, got_state):
+        flash("That sign-in link expired or was invalid. Please try again.", "error")
+        return redirect(url_for("customer_login"))
+    if request.args.get("error") or not request.args.get("code"):
+        flash("Google sign-in was cancelled.", "error")
+        return redirect(url_for("customer_login"))
+
+    code = request.args["code"]
+    token_data = urllib.parse.urlencode({
+        "code": code,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": url_for("customer_login_google_callback", _external=True),
+        "grant_type": "authorization_code",
+    }).encode()
+    try:
+        token_req = urllib.request.Request(GOOGLE_OAUTH_TOKEN_URL, data=token_data, method="POST")
+        with urllib.request.urlopen(token_req, timeout=10) as resp:
+            token_json = json.loads(resp.read().decode())
+        access_token = token_json["access_token"]
+
+        userinfo_req = urllib.request.Request(
+            GOOGLE_OAUTH_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"},
+        )
+        with urllib.request.urlopen(userinfo_req, timeout=10) as resp:
+            profile = json.loads(resp.read().decode())
+    except (urllib.error.URLError, urllib.error.HTTPError, KeyError, ValueError, TimeoutError) as exc:
+        app.logger.error("Google sign-in failed during token/userinfo exchange: %s", exc)
+        flash("Google sign-in didn't work. Please try again or use your email and password.", "error")
+        return redirect(url_for("customer_login"))
+
+    email = (profile.get("email") or "").strip().lower()
+    if not email or not profile.get("email_verified"):
+        flash("That Google account doesn't have a verified email address.", "error")
+        return redirect(url_for("customer_login"))
+    name = (profile.get("name") or email.split("@")[0]).strip()
+    google_id = profile.get("sub")
+
+    user = CustomerUser.query.filter_by(email=email).first()
+    if user:
+        if not user.is_active:
+            flash("Your account is inactive. Please contact us.", "error")
+            return redirect(url_for("customer_login"))
+        if not user.google_id:
+            user.google_id = google_id  # link the Google account to the existing email/password one
+            db.session.commit()
+    else:
+        user = CustomerUser(email=email, name=name, role="customer", google_id=google_id)
+        user.set_password(secrets.token_urlsafe(32))  # unusable random password; "forgot password" can replace it later
+        user.needs_profile_details = True
+        db.session.add(user)
+        db.session.commit()
+
+    session["customer_user_id"] = user.id
+    session["customer_user_role"] = user.role
+    flash(f"Welcome, {user.name}!", "success")
+    if user.needs_profile_details:
+        return redirect(url_for("customer_complete_profile"))
+    if next_url:
+        return redirect(next_url)
+    return redirect(url_for("customer_portal"))
+
+
+@app.route("/customer/complete-profile", methods=["GET", "POST"])
+@customer_login_required
+def customer_complete_profile():
+    """One-time gate for a brand-new Google sign-up: we only got a name
+    and email from Google, so before they can use the rest of the site we
+    ask for the phone number and address every other part of this app
+    assumes a customer has on file (pickups, orders, etc). Accounts that
+    registered the normal way never see this — see needs_profile_details
+    on CustomerUser and enforce_customer_page_restrictions."""
+    user = CustomerUser.query.get(session["customer_user_id"])
+    if not user.needs_profile_details:
+        return redirect(url_for("customer_portal"))
+    if request.method == "POST":
+        phone = request.form.get("phone", "").strip()
+        address = request.form.get("address", "").strip()
+        if not phone or not address:
+            flash("Please provide both a phone number and an address.", "error")
+        else:
+            user.phone = phone
+            user.address = address
+            user.needs_profile_details = False
+            db.session.commit()
+            flash("Thanks! Your profile is all set.", "success")
+            return redirect(url_for("customer_portal"))
+    return render_template("customer/complete_profile.html", user=user)
+
+
 @app.route("/customer/profile", methods=["POST"])
 @customer_login_required
 def customer_profile_update():
@@ -3652,14 +3878,14 @@ def customer_profile_update():
         if new_password:
             if len(new_password) < 8:
                 flash("New password must be at least 8 characters.", "error")
-                return redirect(url_for("customer_portal"))
+                return redirect(url_for("customer_portal", tab="profile"))
             if new_password != confirm_password:
                 flash("Passwords do not match.", "error")
-                return redirect(url_for("customer_portal"))
+                return redirect(url_for("customer_portal", tab="profile"))
             user.set_password(new_password)
         db.session.commit()
         flash("Profile updated successfully.", "success")
-    return redirect(url_for("customer_portal"))
+    return redirect(url_for("customer_portal", tab="profile"))
 
 
 @app.route("/customer/logout")

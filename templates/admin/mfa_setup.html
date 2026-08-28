@@ -8,7 +8,7 @@
   <h3 style="margin-top:0;">1. Scan this QR code</h3>
   <p style="color:var(--text-muted);">
     Using Google Authenticator, Authy, 1Password, or any other TOTP
-    authenticator app, scan this code — it'll add "{{ admin_username or 'Admin' }} — {{ company.name }} ({{ 'Owner' if is_owner_account else 'Creator' }})" to the app.
+    authenticator app, scan this code — it'll add "{{ admin_username or 'Admin' }} — {{ company.name }} ({{ admin_account_label }})" to the app.
   </p>
   <div style="text-align:center; margin:20px 0;">
     <img src="{{ url_for('admin_settings_mfa_qr') }}" alt="Two-factor setup QR code" width="220" height="220" style="border:1px solid var(--border); border-radius:10px; padding:12px; background:#fff;">

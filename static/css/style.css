@@ -282,10 +282,18 @@ a { color: inherit; text-decoration: none; }
   height: 100%;
   pointer-events: none;
 }
-/* Small parcel icon that travels back and forth along the same arc as the
-   dashed Canada -> Philippines route drawn into the flyer image. */
+/* Dashed flight-path arc between the Toronto and Manila pins, drawn over
+   the world map baked into the flyer image. */
+.hero-route-path {
+  stroke: #6f7b8b;
+  stroke-width: 4;
+  stroke-dasharray: 14 12;
+  stroke-linecap: round;
+  opacity: 0.8;
+}
+/* Small parcel icon that travels back and forth along that same arc. */
 .hero-route-marker {
-  offset-path: path("M 222 165 Q 950 90 1683 165");
+  offset-path: path("M 524 149 Q 1055 90 1587 303");
   offset-rotate: 0deg;
   offset-distance: 0%;
   animation: hero-route-travel 3.6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
@@ -295,8 +303,61 @@ a { color: inherit; text-decoration: none; }
   0%   { offset-distance: 0%; }
   100% { offset-distance: 100%; }
 }
+/* Toronto/Manila location pins: a soft ground-shadow pulse plus a gentle
+   drop-and-settle bob on the pin itself, each on its own independent
+   timing so the two pins don't animate in lockstep. The pin's own drop
+   shape rotates/scales from its tip (the actual pinpointed location), so
+   transform-origin has to follow the tip's position within the pin's own
+   -95..22 coordinate space, not the group's transform (which just moves
+   the whole pin to its map position). */
+.hero-pin-drop {
+  transform-origin: 0px 22px;
+  animation: hero-pin-bob 2.6s ease-in-out infinite;
+}
+.hero-pin--manila .hero-pin-drop {
+  animation-delay: -1.3s; /* offset so the two pins bob out of sync */
+}
+.hero-pin-pulse {
+  transform-origin: center;
+  opacity: 0.35;
+  animation: hero-pin-pulse 2.6s ease-in-out infinite;
+}
+.hero-pin--manila .hero-pin-pulse {
+  animation-delay: -1.3s;
+}
+/* Note: an SVG element's CSS `transform` overrides its `transform`
+   presentation attribute, so the label's own translate(0,-112) attribute
+   (positioning it above the pin) only applies as a static fallback -- once
+   this animation is active, these keyframes carry that same offset
+   themselves so the label doesn't jump to the group's origin. */
+.hero-pin-label {
+  opacity: 0;
+  transform: translate(0px, -106px);
+  animation: hero-pin-label-in 0.4s ease-out 0.6s forwards;
+}
+.hero-pin-label text {
+  fill: #ffffff;
+  font-family: var(--font-body, sans-serif);
+  font-size: 26px;
+  font-weight: 700;
+}
+@keyframes hero-pin-bob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-10px) scale(1.04); }
+}
+@keyframes hero-pin-pulse {
+  0%   { transform: scale(0.7); opacity: 0.45; }
+  70%  { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+@keyframes hero-pin-label-in {
+  from { opacity: 0; transform: translate(0px, -100px); }
+  to   { opacity: 1; transform: translate(0px, -112px); }
+}
 @media (prefers-reduced-motion: reduce) {
   .hero-route-marker { animation: none; offset-distance: 50%; }
+  .hero-pin-drop, .hero-pin-pulse { animation: none; }
+  .hero-pin-label { animation: none; opacity: 1; }
 }
 .hero-text { text-align: left; }
 .hero .eyebrow {
@@ -732,6 +793,38 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
   border-radius: var(--radius);
   padding: 34px;
   box-shadow: var(--shadow);
+}
+
+.google-signin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.google-signin-btn:hover { background: var(--bg-alt); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.login-divider::before, .login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
 .admin-form { display: flex; flex-direction: column; gap: 16px; max-width: 640px; }

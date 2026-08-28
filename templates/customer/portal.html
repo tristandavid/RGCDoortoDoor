@@ -16,43 +16,39 @@
       <a href="{{ url_for('customer_logout') }}" class="btn btn-outline">Sign Out</a>
     </div>
 
-    {# Quick Links — only shows pages this account actually has access to #}
     {% set allowed = user.allowed_endpoints() %}
-    {% if allowed.intersection(['track', 'rates', 'contact_us', 'empty_box_sales', 'book_a_pickup']) %}
-    <div class="admin-card" style="margin-bottom:2rem;">
-      <h3 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:.75rem;">Quick Links</h3>
-      <div style="display:flex; flex-wrap:wrap; gap:.75rem;">
-        {% if 'track' in allowed %}
-        <a href="{{ url_for('track') }}" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:.4rem;">
-          📦 <span>Track a Package</span>
-        </a>
-        {% endif %}
-        {% if 'rates' in allowed %}
-        <a href="{{ url_for('rates') }}" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:.4rem;">
-          📋 <span>View Rates</span>
-        </a>
-        {% endif %}
-        {% if 'contact_us' in allowed %}
-        <a href="{{ url_for('contact_us') }}" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:.4rem;">
-          ✉ <span>Contact Us</span>
-        </a>
-        {% endif %}
-        {% if 'empty_box_sales' in allowed %}
-        <a href="{{ url_for('empty_box_sales') }}" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:.4rem;">
-          🛍 <span>Shop Boxes</span>
-        </a>
-        {% endif %}
-        {% if 'book_a_pickup' in allowed %}
-        <a href="{{ url_for('book_a_pickup') }}" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:.4rem;">
-          📅 <span>Book a Pickup</span>
-        </a>
-        {% endif %}
-      </div>
+    {% set active_tab = request.args.get('tab', 'orders') %}
+
+    {# Tab switcher #}
+    <div style="display:flex; border-bottom:2px solid var(--border); margin-bottom:2rem; gap:0; flex-wrap:wrap;">
+      <button type="button" id="tab-orders-btn"
+        onclick="switchPortalTab('orders')"
+        style="flex:1; min-width:140px; padding:.7rem 1rem; border:none; background:none; cursor:pointer;
+               font-weight:600; font-size:.95rem; border-bottom:3px solid transparent;
+               margin-bottom:-2px; transition:color .15s, border-color .15s;"
+        class="tab-btn {% if active_tab != 'pickups' and active_tab != 'profile' %}tab-active{% endif %}">
+        📦 My Orders
+      </button>
+      <button type="button" id="tab-pickups-btn"
+        onclick="switchPortalTab('pickups')"
+        style="flex:1; min-width:140px; padding:.7rem 1rem; border:none; background:none; cursor:pointer;
+               font-weight:600; font-size:.95rem; border-bottom:3px solid transparent;
+               margin-bottom:-2px; transition:color .15s, border-color .15s;"
+        class="tab-btn {% if active_tab == 'pickups' %}tab-active{% endif %}">
+        📅 My Pickup Requests
+      </button>
+      <button type="button" id="tab-profile-btn"
+        onclick="switchPortalTab('profile')"
+        style="flex:1; min-width:140px; padding:.7rem 1rem; border:none; background:none; cursor:pointer;
+               font-weight:600; font-size:.95rem; border-bottom:3px solid transparent;
+               margin-bottom:-2px; transition:color .15s, border-color .15s;"
+        class="tab-btn {% if active_tab == 'profile' %}tab-active{% endif %}">
+        👤 My Profile
+      </button>
     </div>
-    {% endif %}
 
     {# Orders #}
-    <div class="admin-card" style="margin-bottom:2rem;">
+    <div id="panel-orders" class="admin-card" style="margin-bottom:2rem; {% if active_tab == 'pickups' or active_tab == 'profile' %}display:none;{% endif %}">
       <h3 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:.75rem;">📦 My Orders</h3>
       {% if orders %}
         <div class="table-wrap">
@@ -92,7 +88,7 @@
     </div>
 
     {# Pickups #}
-    <div class="admin-card" style="margin-bottom:2rem;">
+    <div id="panel-pickups" class="admin-card" style="margin-bottom:2rem; {% if active_tab != 'pickups' %}display:none;{% endif %}">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
         <h3 style="margin:0;">📅 My Pickup Requests</h3>
         {% if 'book_a_pickup' in allowed %}<a href="{{ url_for('book_a_pickup') }}" class="btn btn-sm btn-primary">+ Book a Pickup</a>{% endif %}
@@ -131,7 +127,7 @@
     </div>
 
     {# Profile edit #}
-    <div class="admin-card">
+    <div id="panel-profile" class="admin-card" style="{% if active_tab != 'profile' %}display:none;{% endif %}">
       <h3 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:.75rem;">👤 My Profile</h3>
       <p style="color:var(--text-muted); margin-top:0; font-size:.9rem;">
         Keep your details up to date — they'll be pre-filled whenever you book a pickup, place an order, or send us a message.
@@ -171,5 +167,26 @@
 
   </div>
 </section>
+
+<style>
+.tab-btn { color: var(--text-muted); }
+.tab-btn.tab-active { color: var(--primary); border-color: var(--primary) !important; }
+</style>
+
+<script>
+function switchPortalTab(tab) {
+  document.getElementById('panel-orders').style.display  = tab === 'orders'  ? '' : 'none';
+  document.getElementById('panel-pickups').style.display = tab === 'pickups' ? '' : 'none';
+  document.getElementById('panel-profile').style.display = tab === 'profile' ? '' : 'none';
+  document.getElementById('tab-orders-btn').classList.toggle('tab-active',  tab === 'orders');
+  document.getElementById('tab-pickups-btn').classList.toggle('tab-active', tab === 'pickups');
+  document.getElementById('tab-profile-btn').classList.toggle('tab-active', tab === 'profile');
+  if (window.history && window.history.replaceState) {
+    var url = new URL(window.location);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState({}, '', url);
+  }
+}
+</script>
 
 {% endblock %}
