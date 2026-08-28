@@ -2654,6 +2654,56 @@ def admin_mailbox_compose():
     return render_template("admin/mailbox_compose.html")
 
 
+@app.route("/admin/mailbox/<thread_key>/delete", methods=["POST"])
+@login_required
+@owner_required
+def admin_mailbox_thread_delete(thread_key):
+    """Delete an entire conversation (every message with this thread_key)."""
+    thread_key = thread_key.lower()
+    deleted = MailboxMessage.query.filter_by(thread_key=thread_key).delete()
+    db.session.commit()
+    if deleted:
+        flash("Conversation deleted.", "success")
+    else:
+        flash("That conversation was already gone.", "error")
+    return redirect(url_for("admin_mailbox"))
+
+
+@app.route("/admin/mailbox/<thread_key>/message/<int:message_id>/delete", methods=["POST"])
+@login_required
+@owner_required
+def admin_mailbox_message_delete(thread_key, message_id):
+    """Delete a single message within a conversation, without deleting the
+    whole thread. If it was the last message in the thread, go back to the
+    Mailbox list instead of a now-empty thread page."""
+    thread_key = thread_key.lower()
+    message = MailboxMessage.query.filter_by(id=message_id, thread_key=thread_key).first_or_404()
+    db.session.delete(message)
+    db.session.commit()
+    flash("Message deleted.", "success")
+    remaining = MailboxMessage.query.filter_by(thread_key=thread_key).first()
+    if remaining:
+        return redirect(url_for("admin_mailbox_thread", thread_key=thread_key))
+    return redirect(url_for("admin_mailbox"))
+
+
+@app.route("/admin/mailbox/clear-all", methods=["POST"])
+@login_required
+@owner_required
+def admin_mailbox_clear_all():
+    """Delete every message in the Mailbox — every conversation, gone.
+    Requires typing the confirmation phrase in the form (checked here, not
+    just in JS) since this can't be undone."""
+    confirm = request.form.get("confirm", "").strip()
+    if confirm != "DELETE ALL":
+        flash('Type "DELETE ALL" exactly to confirm — nothing was deleted.', "error")
+        return redirect(url_for("admin_mailbox"))
+    count = MailboxMessage.query.delete()
+    db.session.commit()
+    flash(f"Deleted {count} message(s) — Mailbox is now empty.", "success")
+    return redirect(url_for("admin_mailbox"))
+
+
 @app.route("/admin/orders")
 @login_required
 @owner_required
@@ -3373,6 +3423,65 @@ def _db_import_json(data_bytes):
         if dialect == "sqlite":
             conn.execute(text("PRAGMA foreign_keys = ON"))
 
+        # --- Fix up auto-increment sequences (Postgres only) --------------
+        # We just inserted rows with explicit "id" values from the backup.
+        # Postgres's own id sequence for each table has no idea this
+        # happened — it still thinks the next id is wherever it left off
+        # before the restore. Left alone, the very next ORM insert (a new
+        # order, a new pickup request, etc.) reuses an id that already
+        # exists in the freshly-restored table and fails with a duplicate
+        # key / unique violation. Setting each sequence to MAX(id)+1 avoids
+        # that. SQLite doesn't use sequences this way, so this is skipped
+        # there — its rowid-based autoincrement already picks up correctly.
+        if dialect == "postgresql":
+            for table in ordered_tables:
+                if "id" not in meta.tables[table].columns:
+                    continue
+                try:
+                    conn.execute(text(
+                        f'SELECT setval('
+                        f"pg_get_serial_sequence('\"{table}\"', 'id'), "
+                        f'COALESCE((SELECT MAX(id) FROM "{table}"), 0) + 1, false)'
+                    ))
+                except Exception:
+                    # Table has no "id" serial/identity sequence (e.g. a
+                    # string primary key like Setting.key) — nothing to fix.
+                    pass
+
+
+@app.route("/admin/settings/fix-sequences", methods=["POST"])
+@login_required
+def admin_fix_sequences():
+    """One-off repair tool: resets every table's Postgres id sequence to
+    MAX(id)+1. Use this if a database restore was done before this fix
+    existed, and new records (orders, pickups, products, etc.) are failing
+    to save with a duplicate-key error. No-op and harmless on SQLite."""
+    if db.engine.dialect.name != "postgresql":
+        flash("This only applies to Postgres — nothing to fix on this database.", "success")
+        return redirect(url_for("admin_settings"))
+    try:
+        from sqlalchemy import MetaData
+        meta = MetaData()
+        meta.reflect(bind=db.engine)
+        fixed = []
+        with db.engine.begin() as conn:
+            for table_name, table in meta.tables.items():
+                if "id" not in table.columns:
+                    continue
+                try:
+                    conn.execute(text(
+                        f'SELECT setval('
+                        f"pg_get_serial_sequence('\"{table_name}\"', 'id'), "
+                        f'COALESCE((SELECT MAX(id) FROM "{table_name}"), 0) + 1, false)'
+                    ))
+                    fixed.append(table_name)
+                except Exception:
+                    pass
+        flash(f"Sequences fixed for {len(fixed)} table(s). New records should save normally now.", "success")
+    except Exception as exc:
+        flash(f"Sequence fix failed: {exc}", "error")
+    return redirect(url_for("admin_settings"))
+
 
 @app.route("/admin/settings/backup/database")
 @login_required
@@ -4000,6 +4109,27 @@ def api_mailbox_compose():
     if error:
         return jsonify(error=error), 502
     return jsonify(thread_key=to_email, message=_mailbox_message_to_dict(message))
+
+
+@app.route("/api/v1/mailbox/<thread_key>/delete", methods=["POST"])
+@api_login_required
+@api_owner_required
+def api_mailbox_thread_delete(thread_key):
+    thread_key = thread_key.lower()
+    deleted = MailboxMessage.query.filter_by(thread_key=thread_key).delete()
+    db.session.commit()
+    return jsonify(ok=True, deleted_count=deleted)
+
+
+@app.route("/api/v1/mailbox/<thread_key>/message/<int:message_id>/delete", methods=["POST"])
+@api_login_required
+@api_owner_required
+def api_mailbox_message_delete(thread_key, message_id):
+    thread_key = thread_key.lower()
+    message = MailboxMessage.query.filter_by(id=message_id, thread_key=thread_key).first_or_404()
+    db.session.delete(message)
+    db.session.commit()
+    return jsonify(ok=True)
 
 
 @app.route("/api/v1/products")

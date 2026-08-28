@@ -202,6 +202,15 @@
     server (e.g. Google Drive, Dropbox, a USB drive). Backups stored only on this machine won't
     help if the server itself fails.
   </div>
+
+  <div style="background:#ffebee; border:1px solid #ffcdd2; border-radius:8px; padding:14px 16px; margin-top:12px; font-size:.875rem; color:var(--text-muted);">
+    <strong>⚠️ Just restored a database backup and new orders/pickups are failing to save?</strong>
+    Click the button below to fix it — this is safe to run any time and only needs to be run once
+    after a restore.
+    <form method="post" action="{{ url_for('admin_fix_sequences') }}" style="margin-top:10px;">
+      <button type="submit" class="btn btn-small">Fix Database Sequences</button>
+    </form>
+  </div>
 </div>
 
 {% endblock %}
