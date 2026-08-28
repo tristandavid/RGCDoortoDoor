@@ -1411,6 +1411,7 @@ CUSTOMER_ALWAYS_ALLOWED_ENDPOINTS = {
     "customer_portal", "customer_logout", "customer_login", "customer_register",
     "customer_profile_update", "customer_forgot_password", "customer_reset_password",
     "customer_login_google", "customer_login_google_callback", "customer_complete_profile",
+    "customer_pickup_invoice",
     # static files, etc.
     "static",
 }
@@ -2136,6 +2137,13 @@ def enforce_customer_page_restrictions():
         return
 
     user = CustomerUser.query.get(user_id)
+    # After a DB restore the stored ID may point to the wrong row — re-anchor
+    # by email (the stable identity used everywhere else) if needed.
+    session_email = session.get("customer_email", "")
+    if (not user or not user.is_active) and session_email:
+        user = CustomerUser.query.filter_by(email=session_email).first()
+        if user and user.is_active:
+            session["customer_user_id"] = user.id
     if not user or not user.is_active:
         return
     if user.needs_profile_details and endpoint not in {"customer_complete_profile", "customer_logout"}:
