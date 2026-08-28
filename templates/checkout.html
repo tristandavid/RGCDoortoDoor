@@ -39,6 +39,17 @@
         <div class="note-box" style="margin-bottom:1rem;">
           ✅ Logged in as <strong>{{ current_customer.name }}</strong> — your details have been pre-filled.
         </div>
+      {% else %}
+        <div class="note-box" style="margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+          <span>Have an account? Sign in to skip re-typing your details.</span>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="{{ url_for('customer_login', next=request.path) }}" class="btn btn-small btn-outline">Sign In</a>
+            <a href="{{ url_for('customer_login', tab='register', next=request.path) }}" class="btn btn-small btn-primary">Create Account</a>
+          </div>
+        </div>
+        <p style="color:var(--text-muted); font-size:0.9rem; margin:-4px 0 1rem;">
+          No account needed — you can also just fill out the form below to check out as a guest.
+        </p>
       {% endif %}
       <form class="contact-form card" method="post">
         <h3 style="margin-top:0;">Your Details</h3>

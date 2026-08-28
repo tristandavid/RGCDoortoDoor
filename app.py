@@ -920,10 +920,7 @@ def inject_globals():
         if is_owner_account or section[1] not in OWNER_ONLY_ADMIN_SECTIONS
     ]
     # Customer portal user (separate from the admin session above)
-    customer_user_id = session.get("customer_user_id")
-    current_customer = (
-        CustomerUser.query.get(customer_user_id) if customer_user_id else None
-    )
+    current_customer = get_current_customer()
     return {
         "company": company,
         "favicon_url": favicon_url,
@@ -2014,6 +2011,27 @@ def api_owner_required(view):
     return wrapped
 
 
+def get_current_customer():
+    """Look up the logged-in customer (or None), tolerant of a stale
+    session id after a DB restore. The stored customer_user_id may point
+    to the wrong row (or nothing) once row ids have been reset by a
+    restore — email is the stable identity, so this falls back to it and
+    re-anchors the session's id to match. Use this everywhere a route
+    needs "the logged-in customer", instead of querying
+    CustomerUser.query.get(session["customer_user_id"]) directly.
+    """
+    user_id = session.get("customer_user_id")
+    if not user_id:
+        return None
+    user = CustomerUser.query.get(user_id)
+    session_email = session.get("customer_email", "")
+    if (not user or not user.is_active) and session_email:
+        user = CustomerUser.query.filter_by(email=session_email).first()
+        if user and user.is_active:
+            session["customer_user_id"] = user.id
+    return user if (user and user.is_active) else None
+
+
 def customer_login_required(view):
     """Requires any logged-in customer user (via the customer portal
     session). Which pages that user may reach beyond this is checked
@@ -2142,8 +2160,7 @@ def contact_us():
             flash(f"Thanks {name or 'there'}! Your message has been received. "
                   f"We'll get back to you at {email} soon.", "success")
         return redirect(url_for("contact_us"))
-    customer_id = session.get("customer_user_id")
-    prefill = CustomerUser.query.get(customer_id) if customer_id else None
+    prefill = get_current_customer()
     return render_template("contact_us.html", intro_text=get_page_content("contact-intro"), prefill=prefill)
 
 
@@ -2192,8 +2209,7 @@ def book_a_pickup():
         if errors:
             for error in errors:
                 flash(error, "error")
-            customer_id = session.get("customer_user_id")
-            prefill = CustomerUser.query.get(customer_id) if customer_id else None
+            prefill = get_current_customer()
             return render_template(
                 "book_a_pickup.html", time_windows=PICKUP_TIME_WINDOWS, form=request.form, prefill=prefill,
             )
@@ -2241,8 +2257,7 @@ def book_a_pickup():
         )
         return redirect(url_for("book_a_pickup"))
 
-    customer_id = session.get("customer_user_id")
-    prefill = CustomerUser.query.get(customer_id) if customer_id else None
+    prefill = get_current_customer()
     return render_template("book_a_pickup.html", time_windows=PICKUP_TIME_WINDOWS, form={}, prefill=prefill)
 
 
@@ -2387,8 +2402,7 @@ def checkout():
 
         return redirect(url_for("order_confirmation", order_number=order.order_number))
 
-    customer_id = session.get("customer_user_id")
-    prefill = CustomerUser.query.get(customer_id) if customer_id else None
+    prefill = get_current_customer()
     return render_template(
         "checkout.html", items=items, subtotal=subtotal, tax=tax, total=total, hst_rate=HST_RATE, prefill=prefill,
     )
@@ -4339,6 +4353,9 @@ def customer_login():
             session["customer_user_role"] = user.role
             session["customer_email"] = user.email
             flash(f"Welcome, {user.name}! Your account has been created.", "success")
+            next_url = request.args.get("next")
+            if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+                return redirect(next_url)
             return redirect(url_for("customer_portal"))
 
         # --- Normal login ---

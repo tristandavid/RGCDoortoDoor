@@ -30,6 +30,17 @@
       <div class="note-box" style="margin-bottom:1.5rem;">
         ✅ Logged in as <strong>{{ current_customer.name }}</strong> — your details have been pre-filled below.
       </div>
+    {% else %}
+      <div class="note-box" style="margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <span>Have an account? Sign in to skip re-typing your details.</span>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <a href="{{ url_for('customer_login', next=request.path) }}" class="btn btn-small btn-outline">Sign In</a>
+          <a href="{{ url_for('customer_login', tab='register', next=request.path) }}" class="btn btn-small btn-primary">Create Account</a>
+        </div>
+      </div>
+      <p style="color:var(--text-muted); font-size:0.9rem; margin:0 0 1.5rem;">
+        No account needed — you can also just fill out the form below and book as a guest.
+      </p>
     {% endif %}
 
     <form class="pickup-form" method="post" action="{{ url_for('book_a_pickup') }}">
