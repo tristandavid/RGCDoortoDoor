@@ -2912,6 +2912,10 @@ def admin_product_edit(product_id):
 @login_required
 def admin_product_delete(product_id):
     product = Product.query.get_or_404(product_id)
+    # order_item.product_id is nullable — clear any references first so
+    # Postgres doesn't raise a FK violation. The order history is preserved
+    # because product_name and unit_price are stored as snapshot columns.
+    OrderItem.query.filter_by(product_id=product_id).update({"product_id": None})
     delete_uploaded_image(product.image_filename)
     db.session.delete(product)
     db.session.commit()
@@ -3934,6 +3938,7 @@ def api_product_update(product_id):
 @api_login_required
 def api_product_delete(product_id):
     product = Product.query.get_or_404(product_id)
+    OrderItem.query.filter_by(product_id=product_id).update({"product_id": None})
     delete_uploaded_image(product.image_filename)
     db.session.delete(product)
     db.session.commit()
