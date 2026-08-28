@@ -375,6 +375,245 @@ def send_pickup_request_email(pickup):
     )
 
 
+def send_pickup_confirmation_to_customer(pickup):
+    """Send the customer a confirmation that their pickup request was received."""
+    return _send_email(
+        to_email=pickup.email,
+        subject=f"Your Pickup Request — {pickup.pickup_date.strftime('%B %d, %Y')}",
+        body=(
+            f"Hi {pickup.name},\n\n"
+            f"Thanks for booking a pickup with {COMPANY['name']}! Here are your request details:\n\n"
+            f"  Date:     {pickup.pickup_date.strftime('%B %d, %Y')}\n"
+            f"  Time:     {pickup.time_window}\n"
+            f"  Address:  {pickup.address}\n"
+            f"  Boxes:    {pickup.box_count or '(not specified)'}\n"
+            + (f"  Notes:    {pickup.notes}\n" if pickup.notes else "")
+            + f"\nWe'll review your request and be in touch to confirm the details shortly.\n\n"
+            f"If you have any questions, reply to this email or reach us at "
+            f"{CONTACT_RECIPIENT_EMAIL}.\n\n"
+            f"{COMPANY['name']}"
+        ),
+        reply_to=CONTACT_RECIPIENT_EMAIL,
+    )
+
+
+def send_pickup_status_email(pickup):
+    """Notify the customer that their pickup status has changed."""
+    status_messages = {
+        "Confirmed": (
+            f"Great news! Your pickup scheduled for "
+            f"{pickup.pickup_date.strftime('%B %d, %Y')} ({pickup.time_window}) "
+            f"at {pickup.address} has been confirmed. We'll see you then!"
+        ),
+        "Picked Up": (
+            f"Your pickup on {pickup.pickup_date.strftime('%B %d, %Y')} "
+            f"has been marked as completed. Thank you for choosing {COMPANY['name']}!"
+        ),
+        "Cancelled": (
+            f"Your pickup request for {pickup.pickup_date.strftime('%B %d, %Y')} "
+            f"has been cancelled. If this was unexpected or you have questions, please "
+            f"reply to this email or contact us at {CONTACT_RECIPIENT_EMAIL}."
+        ),
+    }
+    detail = status_messages.get(
+        pickup.status,
+        f"Your pickup request status has been updated to: {pickup.status}."
+    )
+    return _send_email(
+        to_email=pickup.email,
+        subject=f"Pickup Update — {pickup.status} | {COMPANY['name']}",
+        body=(
+            f"Hi {pickup.name},\n\n"
+            f"{detail}\n\n"
+            f"Pickup details:\n"
+            f"  Date:     {pickup.pickup_date.strftime('%B %d, %Y')}\n"
+            f"  Time:     {pickup.time_window}\n"
+            f"  Address:  {pickup.address}\n\n"
+            f"Questions? Reply to this email or reach us at {CONTACT_RECIPIENT_EMAIL}.\n\n"
+            f"{COMPANY['name']}"
+        ),
+        reply_to=CONTACT_RECIPIENT_EMAIL,
+    )
+
+
+def send_order_status_email(order):
+    """Notify the customer that their order status has changed."""
+    status_messages = {
+        "Paid": (
+            f"We've received your payment for order {order.order_number}. "
+            f"We'll start preparing your order right away!"
+        ),
+        "Fulfilled": (
+            f"Your order {order.order_number} has been fulfilled and is on its way. "
+            f"Thank you for shopping with {COMPANY['name']}!"
+        ),
+        "Cancelled": (
+            f"Your order {order.order_number} has been cancelled. "
+            f"If this was unexpected or you have questions, please reply to this email "
+            f"or contact us at {CONTACT_RECIPIENT_EMAIL}."
+        ),
+    }
+    detail = status_messages.get(
+        order.status,
+        f"Your order {order.order_number} status has been updated to: {order.status}."
+    )
+    item_lines = "\n".join(
+        f"  {item.quantity} x {item.product_name} — ${item.subtotal:.2f}"
+        for item in order.items
+    )
+    return _send_email(
+        to_email=order.customer_email,
+        subject=f"Order Update — {order.status} | {order.order_number}",
+        body=(
+            f"Hi {order.customer_name},\n\n"
+            f"{detail}\n\n"
+            f"Order summary:\n{item_lines}\n\n"
+            f"  Subtotal: ${order.subtotal:.2f}\n"
+            f"  HST (13%): ${(order.tax_amount or Decimal('0.00')):.2f}\n"
+            f"  Total: ${order.total:.2f} CAD\n\n"
+            f"Questions? Reply to this email or reach us at {CONTACT_RECIPIENT_EMAIL}.\n\n"
+            f"{COMPANY['name']}"
+        ),
+        reply_to=CONTACT_RECIPIENT_EMAIL,
+    )
+
+
+def send_registration_confirmation_email(user):
+    """Welcome email sent when a customer creates an account."""
+    return _send_email(
+        to_email=user.email,
+        subject=f"Welcome to {COMPANY['name']}!",
+        body=(
+            f"Hi {user.name},\n\n"
+            f"Your account has been created successfully. You can now log in to track "
+            f"your orders, view pickup requests, and manage your profile.\n\n"
+            f"  Email: {user.email}\n\n"
+            f"If you didn't create this account, please contact us at "
+            f"{CONTACT_RECIPIENT_EMAIL} right away.\n\n"
+            f"{COMPANY['name']}"
+        ),
+        reply_to=CONTACT_RECIPIENT_EMAIL,
+    )
+    """Send the customer a confirmation that their pickup request was received."""
+    return _send_email(
+        to_email=pickup.email,
+        subject=f"Your Pickup Request — {pickup.pickup_date.strftime('%B %d, %Y')}",
+        body=(
+            f"Hi {pickup.name},\n\n"
+            f"Thanks for booking a pickup with {COMPANY['name']}! Here are your request details:\n\n"
+            f"  Date:     {pickup.pickup_date.strftime('%B %d, %Y')}\n"
+            f"  Time:     {pickup.time_window}\n"
+            f"  Address:  {pickup.address}\n"
+            f"  Boxes:    {pickup.box_count or '(not specified)'}\n"
+            + (f"  Notes:    {pickup.notes}\n" if pickup.notes else "")
+            + f"\nWe'll review your request and be in touch to confirm the details shortly.\n\n"
+            f"If you have any questions, reply to this email or reach us at "
+            f"{CONTACT_RECIPIENT_EMAIL}.\n\n"
+            f"{COMPANY['name']}"
+        ),
+        reply_to=CONTACT_RECIPIENT_EMAIL,
+    )
+
+
+def send_pickup_status_email(pickup):
+    """Notify the customer that their pickup status has changed."""
+    status_messages = {
+        "Confirmed": (
+            f"Great news! Your pickup scheduled for "
+            f"{pickup.pickup_date.strftime('%B %d, %Y')} ({pickup.time_window}) "
+            f"at {pickup.address} has been confirmed. We'll see you then!"
+        ),
+        "Picked Up": (
+            f"Your pickup on {pickup.pickup_date.strftime('%B %d, %Y')} "
+            f"has been marked as completed. Thank you for choosing {COMPANY['name']}!"
+        ),
+        "Cancelled": (
+            f"Your pickup request for {pickup.pickup_date.strftime('%B %d, %Y')} "
+            f"has been cancelled. If this was unexpected or you have questions, please "
+            f"reply to this email or contact us at {CONTACT_RECIPIENT_EMAIL}."
+        ),
+    }
+    detail = status_messages.get(
+        pickup.status,
+        f"Your pickup request status has been updated to: {pickup.status}."
+    )
+    return _send_email(
+        to_email=pickup.email,
+        subject=f"Pickup Update — {pickup.status} | {COMPANY['name']}",
+        body=(
+            f"Hi {pickup.name},\n\n"
+            f"{detail}\n\n"
+            f"Pickup details:\n"
+            f"  Date:     {pickup.pickup_date.strftime('%B %d, %Y')}\n"
+            f"  Time:     {pickup.time_window}\n"
+            f"  Address:  {pickup.address}\n\n"
+            f"Questions? Reply to this email or reach us at {CONTACT_RECIPIENT_EMAIL}.\n\n"
+            f"{COMPANY['name']}"
+        ),
+        reply_to=CONTACT_RECIPIENT_EMAIL,
+    )
+
+
+def send_order_status_email(order):
+    """Notify the customer that their order status has changed."""
+    status_messages = {
+        "Paid": (
+            f"We've received your payment for order {order.order_number}. "
+            f"We'll start preparing your order right away!"
+        ),
+        "Fulfilled": (
+            f"Your order {order.order_number} has been fulfilled and is on its way. "
+            f"Thank you for shopping with {COMPANY['name']}!"
+        ),
+        "Cancelled": (
+            f"Your order {order.order_number} has been cancelled. "
+            f"If this was unexpected or you have questions, please reply to this email "
+            f"or contact us at {CONTACT_RECIPIENT_EMAIL}."
+        ),
+    }
+    detail = status_messages.get(
+        order.status,
+        f"Your order {order.order_number} status has been updated to: {order.status}."
+    )
+    item_lines = "\n".join(
+        f"  {item.quantity} x {item.product_name} — ${item.subtotal:.2f}"
+        for item in order.items
+    )
+    return _send_email(
+        to_email=order.customer_email,
+        subject=f"Order Update — {order.status} | {order.order_number}",
+        body=(
+            f"Hi {order.customer_name},\n\n"
+            f"{detail}\n\n"
+            f"Order summary:\n{item_lines}\n\n"
+            f"  Subtotal: ${order.subtotal:.2f}\n"
+            f"  HST (13%): ${(order.tax_amount or Decimal('0.00')):.2f}\n"
+            f"  Total: ${order.total:.2f} CAD\n\n"
+            f"Questions? Reply to this email or reach us at {CONTACT_RECIPIENT_EMAIL}.\n\n"
+            f"{COMPANY['name']}"
+        ),
+        reply_to=CONTACT_RECIPIENT_EMAIL,
+    )
+
+
+def send_registration_confirmation_email(user):
+    """Welcome email sent when a customer creates an account."""
+    return _send_email(
+        to_email=user.email,
+        subject=f"Welcome to {COMPANY['name']}!",
+        body=(
+            f"Hi {user.name},\n\n"
+            f"Your account has been created successfully. You can now log in to track "
+            f"your orders, view pickup requests, and manage your profile.\n\n"
+            f"  Email: {user.email}\n\n"
+            f"If you didn't create this account, please contact us at "
+            f"{CONTACT_RECIPIENT_EMAIL} right away.\n\n"
+            f"{COMPANY['name']}"
+        ),
+        reply_to=CONTACT_RECIPIENT_EMAIL,
+    )
+
+
 # --- Admin Mailbox (compose/reply only — no inbound mirror) -----------------
 # See the MailboxMessage model for the full picture. Contact-form and
 # pickup-request submissions are still saved here automatically. There's no
@@ -1853,8 +2092,18 @@ def customer_login_required(view):
             flash("Please log in to continue.", "error")
             return redirect(url_for("customer_login", next=request.path))
         user = CustomerUser.query.get(user_id)
+        # After a DB restore the stored ID may point to the wrong row.
+        # Re-anchor by email (the stable identity used everywhere else) if
+        # the ID lookup fails or returns a different email than the session.
+        session_email = session.get("customer_email", "")
+        if (not user or not user.is_active) and session_email:
+            user = CustomerUser.query.filter_by(email=session_email).first()
+            if user and user.is_active:
+                # Update the session ID to match the restored row's new ID
+                session["customer_user_id"] = user.id
         if not user or not user.is_active:
             session.pop("customer_user_id", None)
+            session.pop("customer_email", None)
             flash("Your account is inactive. Please contact us.", "error")
             return redirect(url_for("customer_login"))
         return view(*args, **kwargs)
@@ -2016,6 +2265,7 @@ def book_a_pickup():
         db.session.commit()
 
         send_pickup_request_email(pickup)
+        send_pickup_confirmation_to_customer(pickup)
         # Mirror into the admin Mailbox too, same reasoning as the contact
         # form: this IS an email to CONTACT_RECIPIENT_EMAIL, so it belongs
         # in the same inbox view as everything else sent to the business.
@@ -2540,6 +2790,7 @@ def admin_order_update_status(order_id):
     else:
         order.status = status
         db.session.commit()
+        send_order_status_email(order)
         flash("Order status updated.", "success")
     return redirect(url_for("admin_order_detail", order_id=order.id))
 
@@ -2699,6 +2950,7 @@ def admin_pickup_update_status(pickup_id):
     else:
         pickup.status = status
         db.session.commit()
+        send_pickup_status_email(pickup)
         flash("Pickup status updated.", "success")
     return redirect(url_for("admin_pickups"))
 
@@ -3564,6 +3816,7 @@ def api_order_update_status(order_id):
         return jsonify(error="Invalid status."), 400
     order.status = status
     db.session.commit()
+    send_order_status_email(order)
     return jsonify(order=_order_to_dict(order, include_items=True))
 
 
@@ -3747,6 +4000,7 @@ def api_pickup_update_status(pickup_id):
         return jsonify(error="Invalid status."), 400
     pickup.status = status
     db.session.commit()
+    send_pickup_status_email(pickup)
     return jsonify(pickup=_pickup_to_dict(pickup))
 
 
@@ -4000,8 +4254,10 @@ def customer_login():
             user.set_password(password)
             db.session.add(user)
             db.session.commit()
+            send_registration_confirmation_email(user)
             session["customer_user_id"] = user.id
             session["customer_user_role"] = user.role
+            session["customer_email"] = user.email
             flash(f"Welcome, {user.name}! Your account has been created.", "success")
             return redirect(url_for("customer_portal"))
 
@@ -4012,6 +4268,7 @@ def customer_login():
         if user and user.is_active and user.check_password(password):
             session["customer_user_id"] = user.id
             session["customer_user_role"] = user.role
+            session["customer_email"] = user.email
             flash(f"Welcome back, {user.name}!", "success")
             next_url = request.args.get("next")
             # Only allow safe same-site redirects
@@ -4172,9 +4429,11 @@ def customer_login_google_callback():
         user.needs_profile_details = True
         db.session.add(user)
         db.session.commit()
+        send_registration_confirmation_email(user)
 
     session["customer_user_id"] = user.id
     session["customer_user_role"] = user.role
+    session["customer_email"] = user.email
     flash(f"Welcome, {user.name}!", "success")
     if user.needs_profile_details:
         return redirect(url_for("customer_complete_profile"))
@@ -4269,7 +4528,11 @@ def customer_pickup_invoice(pickup_id):
     file so that guessing a UUID doesn't leak someone else's invoice."""
     user = CustomerUser.query.get(session["customer_user_id"])
     pickup = PickupRequest.query.get_or_404(pickup_id)
-    if pickup.email.lower() != user.email.lower():
+    # Use the session email as the authoritative identity — it survives DB
+    # restores where row IDs change but the email stays the same.
+    session_email = (session.get("customer_email") or (user.email if user else "")).lower().strip()
+    pickup_email = (pickup.email or "").lower().strip()
+    if not session_email or session_email != pickup_email:
         abort(403)
     if not pickup.invoice_filename:
         abort(404)
