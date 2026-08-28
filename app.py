@@ -749,7 +749,7 @@ ADMIN_SECTIONS = [
      {"admin_orders", "admin_order_detail"}),
     ("💵", "Invoices", "admin_invoices",
      {"admin_invoices", "admin_invoice_new", "admin_invoice_detail"}),
-    ("📅", "Pickups", "admin_pickups", {"admin_pickups"}),
+    ("📅", "Pickups", "admin_pickups", {"admin_pickups", "admin_pickup_detail"}),
     ("📧", "Subscribers", "admin_subscribers", {"admin_subscribers"}),
     ("👥", "Users", "admin_users",
      {"admin_users", "admin_user_new", "admin_user_edit"}),
@@ -1021,6 +1021,12 @@ class PickupRequest(db.Model):
     notes = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(30), nullable=False, default=PICKUP_STATUSES[0])
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Set from /admin/pickups/<id> when the owner uploads an invoice for this
+    # pickup (a scanned/exported PDF or image, not a generated one) — stored
+    # relative to the static folder via save_uploaded_image(), same pattern
+    # as product photos and the site favicon. Shown to the customer on their
+    # My Account > My Pickup Requests tab once set.
+    invoice_filename = db.Column(db.String(300), nullable=True)
 
     @property
     def status_badge_class(self):
@@ -1481,6 +1487,7 @@ with app.app_context():
     _ensure_column("customer_user", "allowed_pages", "TEXT")
     _ensure_column("customer_user", "google_id", "VARCHAR(64)")
     _ensure_column("customer_user", "needs_profile_details", "BOOLEAN DEFAULT FALSE")
+    _ensure_column("pickup_request", "invoice_filename", "VARCHAR(300)")
     # The "staff"/"admin" CustomerUser roles have been removed — every
     # account on the public portal is a "customer" now, with page access
     # controlled individually via allowed_pages instead. Any pre-existing
@@ -1507,6 +1514,7 @@ with app.app_context():
 # ---------------------------------------------------------------------------
 
 FAVICON_EXTENSIONS = {"ico", "png", "jpg", "jpeg", "svg"}
+INVOICE_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
 
 
 def _has_allowed_extension(filename, allowed_extensions):
@@ -2676,6 +2684,47 @@ def admin_pickup_update_status(pickup_id):
         db.session.commit()
         flash("Pickup status updated.", "success")
     return redirect(url_for("admin_pickups"))
+
+
+@app.route("/admin/pickups/<int:pickup_id>")
+@login_required
+@owner_required
+def admin_pickup_detail(pickup_id):
+    pickup = PickupRequest.query.get_or_404(pickup_id)
+    return render_template("admin/pickup_detail.html", pickup=pickup, statuses=PICKUP_STATUSES)
+
+
+@app.route("/admin/pickups/<int:pickup_id>/invoice", methods=["POST"])
+@login_required
+@owner_required
+def admin_pickup_invoice_upload(pickup_id):
+    pickup = PickupRequest.query.get_or_404(pickup_id)
+    uploaded = request.files.get("invoice")
+    if not uploaded or not uploaded.filename:
+        flash("Please choose a file to upload.", "error")
+        return redirect(url_for("admin_pickup_detail", pickup_id=pickup.id))
+    new_filename = save_uploaded_image(
+        uploaded, prefix="invoices", allowed_extensions=INVOICE_EXTENSIONS,
+    )
+    if new_filename:
+        delete_uploaded_image(pickup.invoice_filename)
+        pickup.invoice_filename = new_filename
+        db.session.commit()
+        flash("Invoice uploaded — the customer will see it on their My Account page.", "success")
+    # If new_filename is None, save_uploaded_image already flashed why.
+    return redirect(url_for("admin_pickup_detail", pickup_id=pickup.id))
+
+
+@app.route("/admin/pickups/<int:pickup_id>/invoice/remove", methods=["POST"])
+@login_required
+@owner_required
+def admin_pickup_invoice_remove(pickup_id):
+    pickup = PickupRequest.query.get_or_404(pickup_id)
+    delete_uploaded_image(pickup.invoice_filename)
+    pickup.invoice_filename = None
+    db.session.commit()
+    flash("Invoice removed.", "success")
+    return redirect(url_for("admin_pickup_detail", pickup_id=pickup.id))
 
 
 @app.route("/admin/subscribers")

@@ -103,6 +103,7 @@
                 <th>Time</th>
                 <th>Boxes</th>
                 <th>Status</th>
+                <th>Invoice</th>
               </tr>
             </thead>
             <tbody>
@@ -113,6 +114,13 @@
                 <td>{{ p.time_window }}</td>
                 <td>{{ p.box_count or '—' }}</td>
                 <td><span class="badge {{ p.status_badge_class }}">{{ p.status }}</span></td>
+                <td>
+                  {% if p.invoice_filename %}
+                    <a href="{{ url_for('static', filename=p.invoice_filename) }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">🧾 View</a>
+                  {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                  {% endif %}
+                </td>
               </tr>
               {% endfor %}
             </tbody>

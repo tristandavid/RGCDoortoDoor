@@ -24,7 +24,7 @@
     </thead>
     <tbody>
       {% for user in users %}
-      <tr>
+      <tr class="row-link" onclick="if (!event.target.closest('.admin-actions')) window.location = '{{ url_for('admin_user_edit', user_id=user.id) }}';">
         <td><strong>{{ user.name }}</strong></td>
         <td>{{ user.email }}</td>
         <td>
@@ -42,8 +42,8 @@
           {% endif %}
         </td>
         <td>{{ user.created_at.strftime('%b %d, %Y') }}</td>
-        <td style="white-space:nowrap;">
-          <a href="{{ url_for('admin_user_edit', user_id=user.id) }}" class="btn btn-sm btn-outline">Edit</a>
+        <td style="white-space:nowrap;" class="admin-actions">
+          <a href="{{ url_for('admin_user_edit', user_id=user.id) }}" class="btn btn-sm btn-outline">Edit page access</a>
           <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}"
                 style="display:inline;"
                 onsubmit="return confirm('Delete account for {{ user.name }}? This cannot be undone.')">

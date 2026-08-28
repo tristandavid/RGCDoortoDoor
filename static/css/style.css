@@ -766,6 +766,11 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
 }
 .admin-table th { background: var(--bg-alt); font-family: var(--font-head); }
 .admin-table tr:last-child td { border-bottom: none; }
+/* Rows that navigate to a detail/edit page on click (Users, Pickups) — the
+   row itself is clickable; interactive elements inside it (buttons, forms,
+   selects) stop the click from bubbling so they still work normally. */
+.admin-table tr.row-link { cursor: pointer; }
+.admin-table tr.row-link:hover { background: var(--bg-alt); }
 .admin-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .admin-actions .btn, .admin-actions button { padding: 7px 14px; font-size: 0.82rem; }
 .btn-small { padding: 7px 14px !important; font-size: 0.82rem !important; }

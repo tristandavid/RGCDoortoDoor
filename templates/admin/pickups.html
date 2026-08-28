@@ -17,12 +17,13 @@
           <th>Preferred Date</th>
           <th>Time Window</th>
           <th>Boxes</th>
+          <th>Invoice</th>
           <th>Status</th>
         </tr>
       </thead>
       <tbody>
         {% for pickup in pickups %}
-        <tr>
+        <tr class="row-link" onclick="if (!event.target.closest('form')) window.location = '{{ url_for('admin_pickup_detail', pickup_id=pickup.id) }}';">
           <td>
             {{ pickup.name }}<br>
             <span style="color:var(--text-muted); font-size:0.85rem;">{{ pickup.email }}<br>{{ pickup.phone }}</span>
@@ -31,6 +32,11 @@
           <td>{{ pickup.pickup_date.strftime('%b %d, %Y') }}</td>
           <td>{{ pickup.time_window }}</td>
           <td>{{ pickup.box_count or '—' }}</td>
+          <td>
+            {% if pickup.invoice_filename %}
+              <span class="badge badge-delivered" title="Invoice uploaded">🧾 Invoice</span>
+            {% endif %}
+          </td>
           <td>
             <form method="post" action="{{ url_for('admin_pickup_update_status', pickup_id=pickup.id) }}" style="display:flex; gap:6px; align-items:center;">
               <span class="badge {{ pickup.status_badge_class }}">{{ pickup.status }}</span>
