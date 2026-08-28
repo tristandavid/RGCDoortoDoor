@@ -1066,7 +1066,14 @@ class Setting(db.Model):
     Small and generic on purpose so more settings can be added later
     without a schema change."""
     key = db.Column(db.String(100), primary_key=True)
-    value = db.Column(db.String(500), nullable=True)
+    # Text, not a bounded VARCHAR: this table also stores things like the
+    # MFA backup-codes JSON blob (8 codes x sha256 hash = well over 500
+    # chars), and Postgres — unlike SQLite — actually enforces a VARCHAR
+    # length limit and raises StringDataRightTruncation instead of just
+    # storing it. See _ensure_setting_value_is_text() below for the
+    # migration that widens this column on databases created before this
+    # was Text.
+    value = db.Column(db.Text, nullable=True)
 
 
 class PageContent(db.Model):
@@ -1428,8 +1435,39 @@ def _ensure_column(table, column, ddl_type):
         db.session.commit()
 
 
+def _ensure_setting_value_is_text():
+    """Widen setting.value to an unbounded TEXT column if it's still the
+    old VARCHAR(500) from before this was Text (see the comment on
+    Setting.value). Bounded VARCHAR is fine on SQLite, which never
+    enforces the length — that's why this never showed up in local/dev
+    testing — but Postgres does enforce it and raises
+    StringDataRightTruncation the first time something long (e.g. the MFA
+    backup-codes JSON) is written. No-op once already Text/unbounded, and
+    safe to run on every startup."""
+    inspector = inspect(db.engine)
+    if "setting" not in inspector.get_table_names():
+        return
+    for col in inspector.get_columns("setting"):
+        if col["name"] != "value":
+            continue
+        col_type = col["type"]
+        # A bounded string type reports a numeric .length; Text/unbounded
+        # types report None (or don't have the attribute at all).
+        if getattr(col_type, "length", None):
+            if db.engine.dialect.name == "postgresql":
+                db.session.execute(text('ALTER TABLE "setting" ALTER COLUMN value TYPE TEXT'))
+            else:
+                # SQLite has no real ALTER COLUMN TYPE, but it's untyped/
+                # dynamically-typed storage anyway, so the existing column
+                # already accepts values of any length — nothing to do.
+                pass
+            db.session.commit()
+        break
+
+
 with app.app_context():
     db.create_all()
+    _ensure_setting_value_is_text()
     _ensure_column("order", "tax_amount", "NUMERIC(10, 2)")
     _ensure_column("subscriber", "name", "VARCHAR(200)")
     _ensure_column("subscriber", "address", "VARCHAR(300)")
