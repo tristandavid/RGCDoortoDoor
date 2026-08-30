@@ -612,6 +612,7 @@ SHIPMENT_STATUSES = [
 PRODUCT_CATEGORIES = [
     ("packaging", "Packaging Item"),
     ("box", "Empty Box"),
+    ("combo", "Combo Box"),
     ("sari-sari", "Sari-Sari Item"),
 ]
 PRODUCT_CATEGORY_VALUES = {value for value, _label in PRODUCT_CATEGORIES}
@@ -967,6 +968,9 @@ class Product(db.Model):
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     price = db.Column(db.Numeric(8, 2), nullable=True)  # null = "Contact for pricing"
+    # Legacy single-photo column, kept only so products saved before the
+    # multi-photo gallery (ProductImage) existed still show a picture. New
+    # uploads go through ProductImage instead — see `images` below.
     image_filename = db.Column(db.String(300), nullable=True)
     is_available = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -976,13 +980,56 @@ class Product(db.Model):
 
     @property
     def image_url(self):
+        """The cover photo: the first gallery image, falling back to the
+        legacy single-photo column for products saved before the gallery
+        existed."""
+        gallery = self.images
+        if gallery:
+            return gallery[0].image_url
         if self.image_filename:
             return url_for("static", filename=self.image_filename)
         return None
 
     @property
+    def gallery_image_urls(self):
+        """All photos for this product, in display order. Falls back to the
+        single legacy photo when no gallery rows exist yet."""
+        gallery = self.images
+        if gallery:
+            return [image.image_url for image in gallery]
+        if self.image_filename:
+            return [url_for("static", filename=self.image_filename)]
+        return []
+
+    @property
     def category_label(self):
         return dict(PRODUCT_CATEGORIES).get(self.category, self.category)
+
+
+class ProductImage(db.Model):
+    """One photo in a product's gallery. A product can have several — the
+    public product page shows them as a thumbnail strip next to the main
+    photo, Amazon-style."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(
+        db.Integer, db.ForeignKey("product.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    image_filename = db.Column(db.String(300), nullable=False)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    product = db.relationship(
+        "Product",
+        backref=db.backref(
+            "images", order_by="ProductImage.sort_order, ProductImage.id",
+            cascade="all, delete-orphan",
+        ),
+    )
+
+    @property
+    def image_url(self):
+        return url_for("static", filename=self.image_filename)
 
 
 class Order(db.Model):
@@ -2291,11 +2338,22 @@ def packaging_items():
     return render_template("packaging_items.html", products=products)
 
 
+@app.route("/combo-box")
+def combo_box():
+    products = (
+        Product.query.filter_by(category="combo", is_available=True)
+        .order_by(Product.created_at.asc())
+        .all()
+    )
+    return render_template("combo_box.html", products=products)
+
+
 # Maps a product's category to the endpoint of the shop page that lists it,
 # so the product detail page can render a "back to shop" link and related items.
 PRODUCT_CATEGORY_SHOP_ENDPOINT = {
     "packaging": "packaging_items",
     "box": "empty_box_sales",
+    "combo": "combo_box",
     "sari-sari": "sari_sari",
 }
 
@@ -3152,17 +3210,34 @@ def admin_product_new():
                 "admin/product_form.html", product=None, categories=PRODUCT_CATEGORIES
             )
 
-        filename = save_uploaded_image(request.files.get("image"))
         product = Product(
             category=category, name=name, description=description or None,
-            price=price, image_filename=filename, is_available=is_available,
+            price=price, is_available=is_available,
         )
         db.session.add(product)
+        db.session.flush()  # assigns product.id, needed for the ProductImage rows below
+        _add_uploaded_product_images(product, request.files.getlist("images"))
         db.session.commit()
         flash("Product created.", "success")
         return redirect(url_for("admin_products"))
 
     return render_template("admin/product_form.html", product=None, categories=PRODUCT_CATEGORIES)
+
+
+def _add_uploaded_product_images(product, file_storages):
+    """Saves each uploaded file (skipping empty file inputs) as a new
+    ProductImage row appended to the end of the product's gallery."""
+    next_order = (max((img.sort_order for img in product.images), default=-1)) + 1
+    for file_storage in file_storages:
+        if not file_storage or not file_storage.filename:
+            continue
+        filename = save_uploaded_image(file_storage)
+        if not filename:
+            continue
+        db.session.add(ProductImage(
+            product_id=product.id, image_filename=filename, sort_order=next_order,
+        ))
+        next_order += 1
 
 
 @app.route("/admin/products/<int:product_id>/edit", methods=["GET", "POST"])
@@ -3187,11 +3262,26 @@ def admin_product_edit(product_id):
                 "admin/product_form.html", product=product, categories=PRODUCT_CATEGORIES
             )
 
-        new_filename = save_uploaded_image(request.files.get("image"))
-        if new_filename:
-            old_filename = product.image_filename
-            product.image_filename = new_filename
-            delete_uploaded_image(old_filename)
+        # Remove any gallery photos the admin checked for deletion.
+        delete_ids = {int(v) for v in request.form.getlist("delete_image_ids") if v.isdigit()}
+        if delete_ids:
+            for image in list(product.images):
+                if image.id in delete_ids:
+                    delete_uploaded_image(image.image_filename)
+                    db.session.delete(image)
+
+        # A legacy single-photo product with no gallery rows yet: once the
+        # admin adds real gallery photos, or explicitly clears it, retire
+        # the old column so `images` becomes the single source of truth.
+        if request.form.get("clear_legacy_image") and product.image_filename:
+            delete_uploaded_image(product.image_filename)
+            product.image_filename = None
+
+        _add_uploaded_product_images(product, request.files.getlist("images"))
+        if product.images and product.image_filename:
+            # Gallery now covers it; drop the redundant legacy photo.
+            delete_uploaded_image(product.image_filename)
+            product.image_filename = None
 
         product.category = category
         product.name = name
@@ -3214,6 +3304,8 @@ def admin_product_delete(product_id):
     # because product_name and unit_price are stored as snapshot columns.
     OrderItem.query.filter_by(product_id=product_id).update({"product_id": None})
     delete_uploaded_image(product.image_filename)
+    for image in product.images:
+        delete_uploaded_image(image.image_filename)
     db.session.delete(product)
     db.session.commit()
     flash("Product deleted.", "success")
@@ -3782,6 +3874,13 @@ def _mailbox_message_to_dict(message):
 
 
 def _product_to_dict(product):
+    # image_url stays for older API consumers -- it's just the first gallery
+    # photo now. image_urls is the full gallery, in display order.
+    image_urls = [
+        url_for("static", filename=image.image_filename, _external=True)
+        for image in product.images
+    ] or ([url_for("static", filename=product.image_filename, _external=True)]
+          if product.image_filename else [])
     return {
         "id": product.id,
         "category": product.category,
@@ -3789,8 +3888,8 @@ def _product_to_dict(product):
         "name": product.name,
         "description": product.description,
         "price": str(product.price) if product.price is not None else None,
-        "image_url": url_for("static", filename=product.image_filename, _external=True)
-            if product.image_filename else None,
+        "image_url": image_urls[0] if image_urls else None,
+        "image_urls": image_urls,
         "is_available": product.is_available,
         "created_at": _iso(product.created_at),
         "updated_at": _iso(product.updated_at),
@@ -4319,6 +4418,8 @@ def api_product_delete(product_id):
     product = Product.query.get_or_404(product_id)
     OrderItem.query.filter_by(product_id=product_id).update({"product_id": None})
     delete_uploaded_image(product.image_filename)
+    for image in product.images:
+        delete_uploaded_image(image.image_filename)
     db.session.delete(product)
     db.session.commit()
     return jsonify(ok=True)

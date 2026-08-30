@@ -114,6 +114,23 @@ document.querySelectorAll('.dropdown-toggle').forEach(function (btn) {
   });
 })();
 
+// Product detail page: clicking a thumbnail swaps the main photo
+(function () {
+  var mainImage = document.getElementById('pd-main-image');
+  var thumbs = document.querySelectorAll('.pd-thumb-btn');
+  if (!mainImage || !thumbs.length) return;
+
+  thumbs.forEach(function (thumb) {
+    thumb.addEventListener('click', function () {
+      var newSrc = thumb.getAttribute('data-img');
+      if (!newSrc) return;
+      mainImage.setAttribute('src', newSrc);
+      thumbs.forEach(function (t) { t.classList.remove('active'); });
+      thumb.classList.add('active');
+    });
+  });
+})();
+
 // Quantity stepper buttons (product cards)
 document.querySelectorAll('.qty-stepper').forEach(function (stepper) {
   var input = stepper.querySelector('input[type=number]');

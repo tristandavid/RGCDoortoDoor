@@ -9,8 +9,20 @@
 
   <div class="pd-layout">
     <div class="pd-media">
-      {% if product.image_url %}
-        <img src="{{ product.image_url }}" alt="{{ product.name }}" class="pd-media-img product-image">
+      {% set gallery = product.gallery_image_urls %}
+      {% if gallery %}
+        {% if gallery|length > 1 %}
+          <div class="pd-thumbs">
+            {% for img_url in gallery %}
+              <button type="button" class="pd-thumb-btn{{ ' active' if loop.first }}" data-img="{{ img_url }}" aria-label="Show photo {{ loop.index }}">
+                <img src="{{ img_url }}" alt="">
+              </button>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div class="pd-main-image-wrap">
+          <img src="{{ gallery[0] }}" alt="{{ product.name }}" class="pd-media-img product-image" id="pd-main-image">
+        </div>
       {% else %}
         <div class="pd-media-placeholder" aria-hidden="true">📦</div>
       {% endif %}
