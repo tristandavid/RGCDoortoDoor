@@ -1187,6 +1187,12 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
   padding: 20px 22px 22px;
 }
 .shop-card-body h3 { font-size: 1.08rem; margin: 0 0 8px; }
+.shop-card-title-link {
+  color: var(--text);
+  text-decoration: none;
+}
+.shop-card-title-link:hover { color: var(--primary); text-decoration: underline; }
+.shop-card-media { display: block; }
 .shop-card-body p {
   color: var(--text-muted);
   font-size: 0.9rem;
@@ -1297,6 +1303,122 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
   border: 1px solid var(--border);
   border-radius: 8px;
   font-family: inherit;
+}
+
+/* ===== Product detail page (Amazon-style product page) ===== */
+.pd-wrap { padding: 28px 20px 60px; }
+.pd-breadcrumb { margin: 0 0 18px; }
+.pd-breadcrumb a {
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.pd-breadcrumb a:hover { text-decoration: underline; }
+
+.pd-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) 1fr minmax(260px, 320px);
+  gap: 40px;
+  align-items: start;
+}
+.pd-media {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: sticky;
+  top: 20px;
+}
+.pd-media-img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+.pd-media-placeholder {
+  width: 100%;
+  height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 5rem;
+  color: var(--border);
+}
+
+.pd-title { font-size: 1.6rem; margin: 0 0 6px; line-height: 1.3; }
+.pd-badge {
+  display: inline-block;
+  background: var(--bg-alt);
+  color: var(--primary-dark);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin: 0 0 10px;
+}
+.pd-divider { border-top: 1px solid var(--border); margin: 16px 0; }
+.pd-price-block { display: flex; align-items: baseline; gap: 2px; }
+.pd-price-currency { font-size: 1.1rem; font-weight: 700; color: var(--primary-dark); }
+.pd-price-amount { font-size: 2.1rem; font-weight: 800; color: var(--primary-dark); font-family: var(--font-head); }
+.pd-price-cad { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-left: 4px; }
+.pd-tax-note { color: var(--text-muted); font-size: 0.85rem; margin: 4px 0 0; }
+.pd-price-contact { font-size: 1.3rem; font-weight: 700; color: var(--primary-dark); }
+.pd-description { color: var(--text-muted); line-height: 1.65; white-space: pre-line; }
+
+.pd-buybox {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  position: sticky;
+  top: 20px;
+}
+.pd-buybox-price { font-size: 1.7rem; font-weight: 800; color: var(--primary-dark); font-family: var(--font-head); margin-bottom: 12px; }
+.pd-buybox-price span { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); }
+.pd-buybox-delivery { font-size: 0.9rem; line-height: 1.5; margin: 0 0 12px; }
+.pd-buybox-stock { color: #157a3b; font-weight: 700; margin: 0 0 12px; }
+.pd-buybox-ship { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin: 0 0 16px; }
+.pd-buybox-form { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.pd-qty-label { font-size: 0.9rem; font-weight: 600; }
+.pd-qty-select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-weight: 700;
+}
+.pd-btn-cart, .pd-btn-buy {
+  width: 100%;
+  border-radius: 999px;
+  font-weight: 700;
+  padding: 11px 18px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+.pd-btn-cart { background: #ffd814; color: #0f1111; border-color: #fcd200; }
+.pd-btn-cart:hover { background: #f7ca00; }
+.pd-btn-buy { background: #ffa41c; color: #0f1111; border-color: #ff8f00; }
+.pd-btn-buy:hover { background: #fa8f00; }
+.pd-buybox-secure { font-size: 0.78rem; color: var(--text-muted); margin: 14px 0 0; text-align: center; }
+
+.pd-related { margin-top: 60px; }
+.pd-related h2 { margin-bottom: 20px; }
+
+@media (max-width: 1080px) {
+  .pd-layout { grid-template-columns: 1fr 1fr; }
+  .pd-buybox { grid-column: 1 / -1; position: static; max-width: 420px; }
+}
+@media (max-width: 700px) {
+  .pd-layout { grid-template-columns: 1fr; }
+  .pd-media { position: static; }
+  .pd-buybox { max-width: none; }
 }
 
 .sari-hero {

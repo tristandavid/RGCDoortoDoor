@@ -2291,6 +2291,34 @@ def packaging_items():
     return render_template("packaging_items.html", products=products)
 
 
+# Maps a product's category to the endpoint of the shop page that lists it,
+# so the product detail page can render a "back to shop" link and related items.
+PRODUCT_CATEGORY_SHOP_ENDPOINT = {
+    "packaging": "packaging_items",
+    "box": "empty_box_sales",
+    "sari-sari": "sari_sari",
+}
+
+
+@app.route("/product/<int:product_id>")
+def product_detail(product_id):
+    product = Product.query.filter_by(id=product_id, is_available=True).first_or_404()
+    related = (
+        Product.query.filter(
+            Product.category == product.category,
+            Product.is_available.is_(True),
+            Product.id != product.id,
+        )
+        .order_by(Product.created_at.desc())
+        .limit(4)
+        .all()
+    )
+    shop_endpoint = PRODUCT_CATEGORY_SHOP_ENDPOINT.get(product.category, "home")
+    return render_template(
+        "product_detail.html", product=product, related=related, shop_endpoint=shop_endpoint,
+    )
+
+
 @app.route("/cart/add/<int:product_id>", methods=["POST"])
 def cart_add(product_id):
     product = Product.query.get_or_404(product_id)
@@ -2309,6 +2337,9 @@ def cart_add(product_id):
     cart[key] = min(99, cart.get(key, 0) + quantity)
     session[CART_SESSION_KEY] = cart
     flash(f"Added {product.name} to your cart.", "success")
+
+    if request.form.get("buy_now"):
+        return redirect(url_for("checkout"))
     return redirect(request.referrer or url_for("cart_view"))
 
 

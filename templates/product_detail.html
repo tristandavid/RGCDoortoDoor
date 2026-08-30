@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="container pd-wrap">
+  <p class="pd-breadcrumb">
+    <a href="{{ url_for(shop_endpoint) }}">&larr; {{ product.category_label }}s</a>
+  </p>
+
+  <div class="pd-layout">
+    <div class="pd-media">
+      {% if product.image_url %}
+        <img src="{{ product.image_url }}" alt="{{ product.name }}" class="pd-media-img product-image">
+      {% else %}
+        <div class="pd-media-placeholder" aria-hidden="true">📦</div>
+      {% endif %}
+    </div>
+
+    <div class="pd-info">
+      <h1 class="pd-title">{{ product.name }}</h1>
+      <p class="pd-badge">{{ product.category_label }}</p>
+      <div class="pd-divider"></div>
+      {% if product.price is not none %}
+        <div class="pd-price-block">
+          <span class="pd-price-currency">$</span><span class="pd-price-amount">{{ "%.2f"|format(product.price) }}</span>
+          <span class="pd-price-cad">CAD</span>
+        </div>
+        <p class="pd-tax-note">+ 13% HST calculated at checkout</p>
+      {% else %}
+        <p class="pd-price-contact">Contact for pricing</p>
+      {% endif %}
+      <div class="pd-divider"></div>
+      {% if product.description %}<p class="pd-description">{{ product.description }}</p>{% endif %}
+    </div>
+
+    <div class="pd-buybox">
+      {% if product.price is not none %}
+        <div class="pd-buybox-price">${{ "%.2f"|format(product.price) }} <span>CAD</span></div>
+        <p class="pd-buybox-delivery">
+          🚚 <strong>Delivery/Pickup:</strong> Available for pickup at our mobile
+          warehouse, or bundle with your next door-to-door shipment.
+        </p>
+        <p class="pd-buybox-stock">✅ In Stock</p>
+        <p class="pd-buybox-ship">
+          Ships from <strong>{{ company.name }}</strong><br>
+          Sold by <strong>{{ company.name }}</strong>
+        </p>
+
+        <form method="post" action="{{ url_for('cart_add', product_id=product.id) }}" class="pd-buybox-form">
+          <label for="pd-qty" class="pd-qty-label">Quantity:</label>
+          <select id="pd-qty" name="quantity" class="pd-qty-select">
+            {% for n in range(1, 11) %}
+              <option value="{{ n }}">{{ n }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn pd-btn-cart">Add to Cart</button>
+        </form>
+        <form method="post" action="{{ url_for('cart_add', product_id=product.id) }}" class="pd-buybox-form">
+          <input type="hidden" name="quantity" value="1">
+          <input type="hidden" name="buy_now" value="1">
+          <button type="submit" class="btn pd-btn-buy">Buy Now</button>
+        </form>
+
+        <p class="pd-buybox-secure">🔒 Secure checkout &middot; Interac e-Transfer</p>
+      {% else %}
+        <div class="pd-buybox-price pd-price-contact">Contact for pricing</div>
+        <a href="{{ url_for('contact_us') }}" class="btn pd-btn-cart" style="text-align:center;">Contact Us</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if related %}
+    <div class="pd-related">
+      <h2>You may also like</h2>
+      {% with products = related %}
+        {% include "_product_grid.html" %}
+      {% endwith %}
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

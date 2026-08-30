@@ -97,6 +97,9 @@ document.querySelectorAll('.dropdown-toggle').forEach(function (btn) {
   }
 
   document.querySelectorAll('.product-image').forEach(function (img) {
+    // Images inside a link (e.g. shop grid cards, which link through to the
+    // product detail page) should navigate normally, not pop the lightbox.
+    if (img.closest('a')) return;
     img.addEventListener('click', function () {
       open(img.getAttribute('src'), img.getAttribute('alt'));
     });
