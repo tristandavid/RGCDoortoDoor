@@ -1357,6 +1357,7 @@ CUSTOMER_TOGGLEABLE_PAGES = [
     ("sari_sari", "Sari-Sari Store", {"sari_sari"}),
     ("empty_box_sales", "Empty Box Sales", {"empty_box_sales"}),
     ("packaging_items", "Packaging Items", {"packaging_items"}),
+    ("combo_box", "Combo Box", {"combo_box"}),
     ("book_a_pickup", "Book a Pickup", {"book_a_pickup"}),
 ]
 CUSTOMER_TOGGLEABLE_PAGE_KEYS = [key for key, _label, _endpoints in CUSTOMER_TOGGLEABLE_PAGES]
@@ -2147,6 +2148,19 @@ def enforce_customer_page_restrictions():
         return
     if user.needs_profile_details and endpoint not in {"customer_complete_profile", "customer_logout"}:
         return redirect(url_for("customer_complete_profile"))
+
+    if endpoint == "product_detail":
+        # One shared route serves every product category, so its access
+        # rule isn't "is 'product_detail' allowed" (it's never in anyone's
+        # toggle list) — it's "is *this product's* shop page allowed".
+        product_id = (request.view_args or {}).get("product_id")
+        product = Product.query.get(product_id) if product_id else None
+        shop_endpoint = PRODUCT_CATEGORY_SHOP_ENDPOINT.get(product.category) if product else None
+        if shop_endpoint and shop_endpoint in user.allowed_endpoints():
+            return
+        flash("You don't have permission to view that page.", "error")
+        return redirect(url_for("customer_portal"))
+
     if endpoint not in user.allowed_endpoints():
         flash("You don't have permission to view that page.", "error")
         return redirect(url_for("customer_portal"))

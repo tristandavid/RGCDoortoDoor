@@ -561,13 +561,11 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
   background: #fff;
 }
 .contact-form .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-@media (max-width: 600px) { .contact-form .form-row { grid-template-columns: 1fr; } }
 
 /* Any two-column form row (e.g. the manual invoice form's Name/Date and
    Email/Address pairs) stacks to one column on phones so fields get full
    width instead of being squeezed to a sliver. */
 .form-row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-@media (max-width: 600px) { .form-row-2col { grid-template-columns: 1fr; } }
 .newsletter-form button { white-space: nowrap; }
 
 .page-header {
@@ -1039,39 +1037,7 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
    keeps every link visible (and tappable) without needing to scroll to
    discover the rest. A sideways scroll is kept as a fallback only, for
    very narrow phones or a larger font-size setting. */
-@media (max-width: 900px) {
-  /* align-items:flex-start (set above for the desktop row layout) turns
-     into shrink-to-fit WIDTH sizing once the shell stacks into a column,
-     letting a wide table drag .admin-main wider than the screen — stretch
-     keeps every stacked section pinned to the full, actual screen width. */
-  .admin-shell { flex-direction: column; align-items: stretch; }
-  .admin-sidebar { width: 100%; height: auto; position: relative; flex-direction: row; align-items: center; }
-  .admin-sidebar-brand { display: none; }
-  .admin-nav {
-    flex-direction: row;
-    padding: 8px 10px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .admin-sidebar-footer {
-    flex-direction: row;
-    border-top: none;
-    padding: 8px 10px 8px 0;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .admin-nav a, .admin-sidebar-footer a { padding: 10px; }
-  .admin-nav a .label, .admin-sidebar-footer a .label { display: none; }
-  .admin-nav .icon, .admin-sidebar-footer .icon { font-size: 1.15rem; }
-  .admin-topbar { padding: 14px 16px; }
-  .admin-content, .admin-flash-wrap { padding-left: 16px; padding-right: 16px; }
-}
 
-@media (max-width: 600px) {
-  .admin-topbar { padding: 12px 14px; flex-wrap: wrap; gap: 10px; }
-  .admin-topbar-titles h1 { font-size: 1.15rem; }
-  .admin-content, .admin-flash-wrap { padding-left: 12px; padding-right: 12px; }
-}
 
 /* Any data table (admin lists, the cart summary) scrolls sideways on
    narrow screens instead of squeezing its columns unreadably thin. */
@@ -1079,9 +1045,6 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-}
-@media (max-width: 700px) {
-  .table-scroll .admin-table { min-width: 560px; }
 }
 
 /* Track package */
@@ -1531,15 +1494,6 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
 .pd-related { margin-top: 60px; }
 .pd-related h2 { margin-bottom: 20px; }
 
-@media (max-width: 1080px) {
-  .pd-layout { grid-template-columns: 1fr 1fr; }
-  .pd-buybox { grid-column: 1 / -1; position: static; max-width: 420px; }
-}
-@media (max-width: 700px) {
-  .pd-layout { grid-template-columns: 1fr; }
-  .pd-media { position: static; }
-  .pd-buybox { max-width: none; }
-}
 
 .sari-hero {
   background: linear-gradient(135deg, #ffb703 0%, #ff8c42 100%);
@@ -1549,45 +1503,8 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
 
 .two-col-text { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
 
-@media (max-width: 900px) {
-  /* Tablet: a 3-column grid drops to 2 columns first (there's still room
-     for a pair side by side) rather than jumping straight to 1 like it
-     used to — phones get the full 1-column stack below. */
-  .grid-3 { grid-template-columns: repeat(2, 1fr); }
-  .grid-2, .contact-grid, .two-col-text { grid-template-columns: 1fr; }
-  .footer-grid { grid-template-columns: 1fr 1fr; }
-  .hero-inner--split { grid-template-columns: 1fr; text-align: center; }
-  .hero-text { text-align: center; }
-  .hero-media { max-width: 520px; margin: 0 auto; }
-  .hero-ctas { justify-content: center; }
-}
 
-@media (max-width: 600px) {
-  .grid-3 { grid-template-columns: 1fr; }
-}
 
-@media (max-width: 760px) {
-  .nav-toggle-label { display: flex; }
-  .main-nav {
-    display: none;
-    flex-direction: column;
-    align-items: stretch;
-    position: absolute;
-    top: 100%;
-    left: 0; right: 0;
-    background: #fff;
-    border-top: 1px solid var(--border);
-    padding: 10px 20px 20px;
-    box-shadow: var(--shadow);
-  }
-  .nav-toggle:checked ~ .main-nav { display: flex; }
-  .dropdown-menu { position: static; box-shadow: none; border: none; display: none; }
-  .dropdown:hover .dropdown-menu, .dropdown:focus-within .dropdown-menu { display: none; }
-  .dropdown.open .dropdown-menu { display: block; }
-  .header-inner { flex-wrap: wrap; position: relative; }
-  .footer-grid { grid-template-columns: 1fr; }
-  .hero h1 { font-size: 1.8rem; }
-}
 
 /* ===== Book a Pick Up (LBC-style step layout) ===== */
 .pickup-hero {
@@ -1781,8 +1698,3 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
   box-shadow: 0 12px 26px rgba(80, 125, 229, 0.45);
 }
 
-@media (max-width: 860px) {
-  .pickup-steps { grid-template-columns: 1fr; }
-  .pickup-submit-row { justify-content: center; text-align: center; }
-  .pickup-submit-btn { width: 100%; }
-}
