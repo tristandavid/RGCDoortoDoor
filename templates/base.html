@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# Fixed to the desktop layout's width (matches .container's max-width)
+     instead of "width=device-width" -- phones/tablets now render the exact
+     same desktop layout, zoomed out to fit, rather than reflowing content
+     to the device's narrower screen. Visitors can still pinch-to-zoom in. #}
+  <meta name="viewport" content="width=1160">
   <title>{% block title %}{{ company.name }}{% endblock %}</title>
   <meta name="description" content="Door-to-door box express shipping service from Canada to the Philippines. Fast, reliable, and safe delivery to Metro Manila, Luzon, Visayas, and Mindanao.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
