@@ -111,7 +111,6 @@ a { color: inherit; text-decoration: none; }
 .site-header {
   background: #fff;
   border-bottom: 1px solid var(--border);
-  width: 60%;
 }
 .header-inner {
   display: flex;
