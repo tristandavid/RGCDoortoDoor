@@ -34,10 +34,12 @@
       <div class="pd-divider"></div>
       {% if product.price is not none %}
         <div class="pd-price-block">
-          <span class="pd-price-currency">$</span><span class="pd-price-amount">{{ "%.2f"|format(product.price) }}</span>
-          <span class="pd-price-cad">CAD</span>
+          <span class="pd-price-currency">{{ product.currency_symbol }}</span><span class="pd-price-amount">{{ "%.2f"|format(product.price) }}</span>
+          <span class="pd-price-cad">{{ product.currency_code }}</span>
         </div>
-        <p class="pd-tax-note">+ 13% HST calculated at checkout</p>
+        {% if not product.is_tax_exempt %}
+          <p class="pd-tax-note">+ 13% HST calculated at checkout</p>
+        {% endif %}
       {% else %}
         <p class="pd-price-contact">Contact for pricing</p>
       {% endif %}
@@ -47,7 +49,7 @@
 
     <div class="pd-buybox">
       {% if product.price is not none %}
-        <div class="pd-buybox-price">${{ "%.2f"|format(product.price) }} <span>CAD</span></div>
+        <div class="pd-buybox-price">{{ product.currency_symbol }}{{ "%.2f"|format(product.price) }} <span>{{ product.currency_code }}</span></div>
         <p class="pd-buybox-delivery">
           🚚 <strong>Delivery/Pickup:</strong> Available for pickup at our mobile
           warehouse, or bundle with your next door-to-door shipment.
@@ -73,7 +75,7 @@
           <button type="submit" class="btn pd-btn-buy">Buy Now</button>
         </form>
 
-        <p class="pd-buybox-secure">🔒 Secure checkout &middot; Interac e-Transfer</p>
+        <p class="pd-buybox-secure">🔒 Secure checkout{% if not product.is_tax_exempt %} &middot; Interac e-Transfer{% endif %}</p>
       {% else %}
         <div class="pd-buybox-price pd-price-contact">Contact for pricing</div>
         <a href="{{ url_for('contact_us') }}" class="btn pd-btn-cart" style="text-align:center;">Contact Us</a>

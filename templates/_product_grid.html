@@ -20,8 +20,10 @@
         <div class="shop-card-footer">
           <div class="shop-card-price">
             {% if product.price is not none %}
-              <span class="price-amount">${{ "%.2f"|format(product.price) }}</span><span class="price-currency">CAD</span>
-              <span class="price-tax-note">+ 13% HST at checkout</span>
+              <span class="price-amount">{{ product.currency_symbol }}{{ "%.2f"|format(product.price) }}</span><span class="price-currency">{{ product.currency_code }}</span>
+              {% if not product.is_tax_exempt %}
+                <span class="price-tax-note">+ 13% HST at checkout</span>
+              {% endif %}
             {% else %}
               <span class="price-contact">Contact for pricing</span>
             {% endif %}

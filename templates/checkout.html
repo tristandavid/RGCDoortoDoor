@@ -15,22 +15,24 @@
       <h3>Order Summary</h3>
       <ul>
         {% for item in items %}
-          <li>{{ item.quantity }} &times; {{ item.product.name }} &mdash; ${{ "%.2f"|format(item.subtotal) }}</li>
+          <li>{{ item.quantity }} &times; {{ item.product.name }} &mdash; {{ item.product.currency_symbol }}{{ "%.2f"|format(item.subtotal) }}</li>
         {% endfor %}
       </ul>
       <div style="margin-top:16px; max-width:280px;">
         <div style="display:flex; justify-content:space-between; color:var(--text-muted);">
-          <span>Subtotal</span><span>${{ "%.2f"|format(subtotal) }}</span>
+          <span>Subtotal</span><span>{{ currency_symbol }}{{ "%.2f"|format(subtotal) }}</span>
         </div>
-        <div style="display:flex; justify-content:space-between; color:var(--text-muted); margin-top:4px;">
-          <span>HST (13%)</span><span>${{ "%.2f"|format(tax) }}</span>
-        </div>
+        {% if tax %}
+          <div style="display:flex; justify-content:space-between; color:var(--text-muted); margin-top:4px;">
+            <span>HST (13%)</span><span>{{ currency_symbol }}{{ "%.2f"|format(tax) }}</span>
+          </div>
+        {% endif %}
         <div style="display:flex; justify-content:space-between; font-weight:800; color:var(--primary-dark); margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
-          <span>Total</span><span>${{ "%.2f"|format(total) }} CAD</span>
+          <span>Total</span><span>{{ currency_symbol }}{{ "%.2f"|format(total) }} {{ currency_code }}</span>
         </div>
       </div>
       <div class="note-box">
-        💵 Total: ${{ "%.2f"|format(total) }} CAD &mdash; payable by Interac e-Transfer
+        💵 Total: {{ currency_symbol }}{{ "%.2f"|format(total) }} {{ currency_code }} &mdash; payable by Interac e-Transfer
         to {{ company.contact_email }} once your order is placed.
       </div>
     </div>

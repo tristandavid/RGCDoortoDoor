@@ -1494,6 +1494,20 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
 .pd-related { margin-top: 60px; }
 .pd-related h2 { margin-bottom: 20px; }
 
+/* ===== Members-only gate (e.g. Combo Box, signed-out visitors) ===== */
+.members-only-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 44px 36px;
+  text-align: center;
+}
+.members-only-icon { font-size: 2.6rem; display: block; margin-bottom: 14px; }
+.members-only-card h2 { margin: 0 0 12px; }
+.members-only-card p { color: var(--text-muted); line-height: 1.6; margin: 0 0 24px; }
+.members-only-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
 
 .sari-hero {
   background: linear-gradient(135deg, #ffb703 0%, #ff8c42 100%);

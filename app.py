@@ -617,6 +617,12 @@ PRODUCT_CATEGORIES = [
 ]
 PRODUCT_CATEGORY_VALUES = {value for value, _label in PRODUCT_CATEGORIES}
 
+# Combo Box prices are entered directly in Philippine Pesos (the goods are
+# valued/sold in the PH market) rather than CAD like the rest of the site,
+# so they display with the peso sign and are excluded from the 13% Ontario
+# HST that applies to everything else at checkout.
+PESO_PRICED_CATEGORIES = {"combo"}
+
 ORDER_STATUSES = ["Awaiting Payment", "Paid", "Fulfilled", "Cancelled"]
 CART_SESSION_KEY = "cart"
 
@@ -629,6 +635,30 @@ def calculate_hst(subtotal):
     """Round HST to the cent using standard half-up rounding (not banker's
     rounding), matching how tax is shown on a real receipt."""
     return (subtotal * HST_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def calculate_cart_totals(items):
+    """subtotal/tax/total for a cart's items (each a dict with "product" and
+    "subtotal" keys, as returned by get_cart_items()). HST is charged only
+    on the portion of the subtotal from non-peso-priced items — Combo Box's
+    peso prices are tax-exempt (see PESO_PRICED_CATEGORIES)."""
+    subtotal = sum((item["subtotal"] for item in items), Decimal("0.00"))
+    taxable_subtotal = sum(
+        (item["subtotal"] for item in items if not item["product"].is_tax_exempt),
+        Decimal("0.00"),
+    )
+    tax = calculate_hst(taxable_subtotal)
+    total = subtotal + tax
+    return subtotal, tax, total
+
+
+def cart_currency(items):
+    """(symbol, code) for a cart/checkout's totals line. If every item is
+    peso-priced, show the total in pesos; otherwise CAD (the common case,
+    and the safe default for a cart mixing CAD and peso items)."""
+    if items and all(item["product"].is_peso_priced for item in items):
+        return "₱", "PHP"
+    return "$", "CAD"
 
 
 # --- Invoices (PDF) ----------------------------------------------------------
@@ -1004,6 +1034,22 @@ class Product(db.Model):
     @property
     def category_label(self):
         return dict(PRODUCT_CATEGORIES).get(self.category, self.category)
+
+    @property
+    def is_peso_priced(self):
+        return self.category in PESO_PRICED_CATEGORIES
+
+    @property
+    def currency_symbol(self):
+        return "₱" if self.is_peso_priced else "$"
+
+    @property
+    def currency_code(self):
+        return "PHP" if self.is_peso_priced else "CAD"
+
+    @property
+    def is_tax_exempt(self):
+        return self.is_peso_priced
 
 
 class ProductImage(db.Model):
@@ -2352,8 +2398,26 @@ def packaging_items():
     return render_template("packaging_items.html", products=products)
 
 
+# Product categories only signed-in customers can browse. An anonymous
+# visitor hitting the shop page or a product page in one of these
+# categories sees a "Sign In / Create Account" gate instead of the listing;
+# a logged-in customer still goes through the normal per-account
+# allowed_endpoints() check in enforce_customer_page_restrictions below.
+MEMBERS_ONLY_CATEGORIES = {"combo"}
+
+
+def render_members_only_gate(next_path):
+    return render_template(
+        "members_only.html",
+        login_url=url_for("customer_login", next=next_path),
+        register_url=url_for("customer_login", tab="register", next=next_path),
+    )
+
+
 @app.route("/combo-box")
 def combo_box():
+    if "combo" in MEMBERS_ONLY_CATEGORIES and not get_current_customer():
+        return render_members_only_gate(request.path)
     products = (
         Product.query.filter_by(category="combo", is_available=True)
         .order_by(Product.created_at.asc())
@@ -2375,6 +2439,8 @@ PRODUCT_CATEGORY_SHOP_ENDPOINT = {
 @app.route("/product/<int:product_id>")
 def product_detail(product_id):
     product = Product.query.filter_by(id=product_id, is_available=True).first_or_404()
+    if product.category in MEMBERS_ONLY_CATEGORIES and not get_current_customer():
+        return render_members_only_gate(request.path)
     related = (
         Product.query.filter(
             Product.category == product.category,
@@ -2394,6 +2460,14 @@ def product_detail(product_id):
 @app.route("/cart/add/<int:product_id>", methods=["POST"])
 def cart_add(product_id):
     product = Product.query.get_or_404(product_id)
+    if product.category in MEMBERS_ONLY_CATEGORIES and not get_current_customer():
+        # Closes the loophole of posting straight to this endpoint to buy a
+        # members-only item without ever seeing (or passing) the sign-in gate.
+        # next= goes back to the product's own page (not request.referrer,
+        # which is a full URL and wouldn't pass customer_login's same-site
+        # "starts with /" check).
+        flash("Please sign in or create an account to purchase this item.", "error")
+        return redirect(url_for("customer_login", next=url_for("product_detail", product_id=product.id)))
     if product.price is None or not product.is_available:
         flash("Sorry, that item isn't available for online purchase — please contact us instead.", "error")
         return redirect(request.referrer or url_for("home"))
@@ -2418,11 +2492,11 @@ def cart_add(product_id):
 @app.route("/cart")
 def cart_view():
     items = get_cart_items()
-    subtotal = sum((item["subtotal"] for item in items), Decimal("0.00"))
-    tax = calculate_hst(subtotal)
-    total = subtotal + tax
+    subtotal, tax, total = calculate_cart_totals(items)
+    currency_symbol, currency_code = cart_currency(items)
     return render_template(
         "cart.html", items=items, subtotal=subtotal, tax=tax, total=total, hst_rate=HST_RATE,
+        currency_symbol=currency_symbol, currency_code=currency_code,
     )
 
 
@@ -2459,9 +2533,8 @@ def checkout():
     if not items:
         flash("Your cart is empty.", "error")
         return redirect(url_for("cart_view"))
-    subtotal = sum((item["subtotal"] for item in items), Decimal("0.00"))
-    tax = calculate_hst(subtotal)
-    total = subtotal + tax
+    subtotal, tax, total = calculate_cart_totals(items)
+    currency_symbol, currency_code = cart_currency(items)
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -2473,6 +2546,7 @@ def checkout():
             flash("Name and email are required.", "error")
             return render_template(
                 "checkout.html", items=items, subtotal=subtotal, tax=tax, total=total, hst_rate=HST_RATE,
+                currency_symbol=currency_symbol, currency_code=currency_code,
             )
 
         def _create_order_and_items():
@@ -2508,6 +2582,7 @@ def checkout():
     prefill = get_current_customer()
     return render_template(
         "checkout.html", items=items, subtotal=subtotal, tax=tax, total=total, hst_rate=HST_RATE, prefill=prefill,
+        currency_symbol=currency_symbol, currency_code=currency_code,
     )
 
 
