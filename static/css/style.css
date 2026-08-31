@@ -111,6 +111,7 @@ a { color: inherit; text-decoration: none; }
 .site-header {
   background: #fff;
   border-bottom: 1px solid var(--border);
+  width: 60%;
 }
 .header-inner {
   display: flex;
@@ -166,6 +167,9 @@ a { color: inherit; text-decoration: none; }
   border-radius: 999px !important;
   padding: 9px 18px !important;
   margin-left: 6px;
+  display: inline-block;
+  transform: scale(0.7);
+  transform-origin: center left;
 }
 .nav-track-btn:hover, .nav-track-btn.active {
   background: var(--primary-dark) !important;
