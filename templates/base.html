@@ -20,6 +20,7 @@
   {% endif %}
 </head>
 <body>
+  <div class="site-top-fixed">
   <div class="topbar">
     <div class="container topbar-inner">
       <span>✉ {{ company.contact_email }}</span>
@@ -70,6 +71,7 @@
       </nav>
     </div>
   </header>
+  </div>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
