@@ -96,6 +96,27 @@
                   >
                   <label for="tw-{{ loop.index }}" class="time-slot-pill">{{ window }}</label>
                 {% endfor %}
+                <input
+                  type="radio"
+                  class="time-slot-radio"
+                  id="tw-custom"
+                  name="time_window"
+                  value="{{ custom_time_value }}"
+                  {% if form.get('time_window') == custom_time_value %}checked{% endif %}
+                  required
+                >
+                <label for="tw-custom" class="time-slot-pill">Custom Time</label>
+              </div>
+              <div id="custom-time-field" class="custom-time-field" {% if form.get('time_window') != custom_time_value %}hidden{% endif %}>
+                <label for="custom_time_window">Your Preferred Time *</label>
+                <input
+                  type="text"
+                  id="custom_time_window"
+                  name="custom_time_window"
+                  placeholder="e.g. 6 - 7pm, or Saturday morning"
+                  value="{{ form.get('custom_time_window', '') }}"
+                  {% if form.get('time_window') == custom_time_value %}required{% endif %}
+                >
               </div>
             </div>
           </div>

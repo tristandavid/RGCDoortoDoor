@@ -216,3 +216,29 @@ document.querySelectorAll('.qty-stepper').forEach(function (stepper) {
     wireRemove(body.lastElementChild);
   });
 })();
+
+// Book a Pickup: "Custom Time" radio reveals a text field for the
+// customer's own preferred time; picking a fixed window hides it again and
+// the field is only marked required while it's actually visible.
+(function () {
+  var customRadio = document.getElementById('tw-custom');
+  var customField = document.getElementById('custom-time-field');
+  var customInput = document.getElementById('custom_time_window');
+  var timeRadios = document.querySelectorAll('.time-slot-radio');
+  if (!customRadio || !customField || !customInput || !timeRadios.length) return;
+
+  function sync() {
+    var showCustom = customRadio.checked;
+    customField.hidden = !showCustom;
+    if (showCustom) {
+      customInput.setAttribute('required', 'required');
+    } else {
+      customInput.removeAttribute('required');
+    }
+  }
+
+  timeRadios.forEach(function (radio) {
+    radio.addEventListener('change', sync);
+  });
+  sync();
+})();

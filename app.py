@@ -868,15 +868,14 @@ def _manual_invoice_pdf_response(invoice):
 
 PICKUP_STATUSES = ["Requested", "Confirmed", "Picked Up", "Cancelled"]
 PICKUP_TIME_WINDOWS = [
-    "9 - 10am",
-    "10 - 11am",
-    "11am - 12pm",
-    "12 - 1pm",
-    "1 - 2pm",
-    "2 - 3pm",
-    "3 - 4pm",
-    "4 - 5pm",
+    "9 - 11am",
+    "11am - 1pm",
+    "1 - 3pm",
 ]
+# The radio value for "Custom Time" on the Book a Pickup form -- selecting it
+# reveals a text field, and whatever the customer types there is saved as
+# the pickup's time_window (see book_a_pickup() below).
+PICKUP_TIME_CUSTOM_VALUE = "custom"
 
 # (Setting key, label) pairs for the owner-editable social media links shown
 # as icon buttons in the footer. Stored in the generic Setting key/value
@@ -2279,9 +2278,21 @@ def book_a_pickup():
         phone = request.form.get("phone", "").strip()
         address = request.form.get("address", "").strip()
         pickup_date_raw = request.form.get("pickup_date", "").strip()
-        time_window = request.form.get("time_window", "").strip()
+        time_window_choice = request.form.get("time_window", "").strip()
+        custom_time_window = request.form.get("custom_time_window", "").strip()
         box_count_raw = request.form.get("box_count", "").strip()
         notes = request.form.get("notes", "").strip()
+
+        # "Custom Time" is its own radio option (value "custom") that reveals
+        # a text field — whatever the customer types there becomes the
+        # actual time_window saved on the pickup, same as picking one of the
+        # fixed windows.
+        if time_window_choice == PICKUP_TIME_CUSTOM_VALUE:
+            time_window = custom_time_window
+        elif time_window_choice in PICKUP_TIME_WINDOWS:
+            time_window = time_window_choice
+        else:
+            time_window = ""
 
         errors = []
         if not name:
@@ -2292,8 +2303,11 @@ def book_a_pickup():
             errors.append("Please enter a contact number.")
         if not address:
             errors.append("Please enter the pickup address.")
-        if time_window not in PICKUP_TIME_WINDOWS:
-            errors.append("Please choose a preferred pickup time.")
+        if not time_window:
+            if time_window_choice == PICKUP_TIME_CUSTOM_VALUE:
+                errors.append("Please enter your preferred pickup time.")
+            else:
+                errors.append("Please choose a preferred pickup time.")
 
         pickup_date = None
         if not pickup_date_raw:
@@ -2319,6 +2333,7 @@ def book_a_pickup():
             prefill = get_current_customer()
             return render_template(
                 "book_a_pickup.html", time_windows=PICKUP_TIME_WINDOWS, form=request.form, prefill=prefill,
+                custom_time_value=PICKUP_TIME_CUSTOM_VALUE,
             )
 
         def _create_pickup_and_mailbox_entry():
@@ -2365,7 +2380,10 @@ def book_a_pickup():
         return redirect(url_for("book_a_pickup"))
 
     prefill = get_current_customer()
-    return render_template("book_a_pickup.html", time_windows=PICKUP_TIME_WINDOWS, form={}, prefill=prefill)
+    return render_template(
+        "book_a_pickup.html", time_windows=PICKUP_TIME_WINDOWS, form={}, prefill=prefill,
+        custom_time_value=PICKUP_TIME_CUSTOM_VALUE,
+    )
 
 
 @app.route("/privacy-policy")

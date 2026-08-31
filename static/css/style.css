@@ -1655,6 +1655,16 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
   outline: 2px solid #2e9e4f;
   outline-offset: 2px;
 }
+.custom-time-field { margin-top: 12px; }
+.custom-time-field label { font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 4px; }
+.custom-time-field input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.92rem;
+}
 
 /* Box-count quick-pick grid */
 .box-count-grid {
