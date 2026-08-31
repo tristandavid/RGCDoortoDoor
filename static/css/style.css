@@ -167,6 +167,7 @@ a { color: inherit; text-decoration: none; }
   padding: 9px 18px !important;
   margin-left: 6px;
   display: inline-block;
+  font-size: 1.1rem !important;
   transform: scale(0.7);
   transform-origin: center left;
 }
