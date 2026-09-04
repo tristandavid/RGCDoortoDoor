@@ -7,3 +7,4 @@ Pillow>=10.0.0
 pyotp>=2.9.0
 qrcode>=7.4.2
 google-auth>=2.29.0
+requests>=2.31.0
