@@ -497,6 +497,74 @@ def send_registration_confirmation_email(user):
         reply_to=CONTACT_RECIPIENT_EMAIL,
     )
 
+def send_manual_invoice_email(invoice, pdf_bytes):
+    """Email a manually-created invoice PDF to the customer.
+
+    Attaches the PDF and includes a plain-text summary in the body so the
+    customer can see the total even in email clients that block attachments.
+    Returns True if Microsoft 365 accepted the message, False otherwise
+    (SMTP not configured, or the send failed) — same contract as _send_email.
+    """
+    if not SMTP_PASSWORD:
+        app.logger.warning(
+            "Tried to email invoice %s to %s but SMTP_PASSWORD isn't set.",
+            invoice.invoice_number, invoice.customer_email,
+        )
+        return False
+
+    item_lines = "\n".join(
+        f"  {_format_invoice_quantity(item.quantity)} x {item.description} — ${item.line_total:.2f}"
+        for item in invoice.items
+    )
+    tax_line = (
+        f"  {invoice.tax_label}: ${invoice.tax_amount:.2f}\n"
+        if invoice.has_tax else ""
+    )
+    body = (
+        f"Hi {invoice.customer_name},\n\n"
+        f"Please find your invoice {invoice.invoice_number} attached.\n\n"
+        f"Summary:\n{item_lines}\n\n"
+        f"  Subtotal: ${invoice.subtotal:.2f}\n"
+        f"{tax_line}"
+        f"  Total: ${invoice.total:.2f} CAD\n\n"
+        f"If you have any questions, reply to this email or reach us at "
+        f"{CONTACT_RECIPIENT_EMAIL}.\n\n"
+        f"{COMPANY['name']}"
+    )
+
+    msg = EmailMessage()
+    msg["From"] = f"{COMPANY['name']} <{SMTP_USERNAME}>"
+    msg["To"] = invoice.customer_email
+    msg["Subject"] = f"Invoice {invoice.invoice_number} from {COMPANY['name']}"
+    msg["Reply-To"] = CONTACT_RECIPIENT_EMAIL
+    msg.set_content(body)
+    msg.add_attachment(
+        pdf_bytes,
+        maintype="application",
+        subtype="pdf",
+        filename=f"invoice-{invoice.invoice_number}.pdf",
+    )
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+        return True
+    except smtplib.SMTPException as exc:
+        app.logger.error(
+            "Microsoft 365 rejected invoice email to %s: %s",
+            invoice.customer_email, exc,
+        )
+        return False
+    except OSError as exc:
+        app.logger.error(
+            "Failed to send invoice email to %s: %s",
+            invoice.customer_email, exc,
+        )
+        return False
+
+
 # --- Admin Mailbox (compose/reply only — no inbound mirror) -----------------
 # See the MailboxMessage model for the full picture. Contact-form and
 # pickup-request submissions are still saved here automatically. There's no
@@ -4147,10 +4215,9 @@ def api_manual_invoice():
     """Mirrors the web admin's /admin/invoices/new (see ManualInvoice above)
     so the companion Android app's manual-invoice screen creates a real,
     persisted invoice — it shows up in the web admin's Invoices list too,
-    same as one entered there. The one thing this endpoint does NOT do is
-    send an email: this project has no SMTP-sending code path wired up for
-    invoices, so `send_email` is accepted (so older/newer app builds don't
-    break) but always comes back as emailed=False."""
+    same as one entered there. When `send_email` is True and SMTP is
+    configured, the PDF is also emailed to the customer with the invoice
+    attached; X-Invoice-Emailed reflects whether the send actually succeeded."""
     data = request.get_json(silent=True) or {}
 
     customer_name = (data.get("customer_name") or "").strip()
@@ -4243,13 +4310,23 @@ def api_manual_invoice():
         total=invoice.total,
     )
 
+    pdf_bytes = pdf_buffer.getvalue()
+
+    # Send the invoice to the customer if requested. We do this after the PDF
+    # is built so we can attach it, and after db.session.commit() so the
+    # invoice is already persisted even if the email fails.
+    send_email = bool(data.get("send_email"))
+    emailed = False
+    if send_email and invoice.customer_email:
+        emailed = send_manual_invoice_email(invoice, pdf_bytes)
+
     response = Response(
-        pdf_buffer.getvalue(),
+        pdf_bytes,
         mimetype="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="invoice-{invoice.invoice_number}.pdf"'},
     )
     response.headers["X-Invoice-Number"] = invoice.invoice_number
-    response.headers["X-Invoice-Emailed"] = "false"
+    response.headers["X-Invoice-Emailed"] = "true" if emailed else "false"
     return response
 
 
