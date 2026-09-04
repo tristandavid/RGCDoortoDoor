@@ -313,10 +313,7 @@ CONTACT_RECIPIENT_EMAIL = os.environ.get("CONTACT_RECIPIENT_EMAIL", COMPANY["con
 # FCM_SERVICE_ACCOUNT_FILE: path to the Firebase Admin SDK JSON key file
 # downloaded from Firebase Console → Project Settings → Service Accounts.
 # If not set, push notifications are silently skipped (app still works).
-FCM_SERVICE_ACCOUNT_FILE = os.environ.get(
-    "FCM_SERVICE_ACCOUNT_FILE",
-    os.path.join(os.path.dirname(__file__), "firebase-service-account.json"),
-)
+FCM_SERVICE_ACCOUNT_FILE = os.environ.get("FCM_SERVICE_ACCOUNT_FILE", "")
 FCM_PROJECT_ID = os.environ.get("FCM_PROJECT_ID", "rgc-manager-9ca76")
 _FCM_SCOPES = ["https://www.googleapis.com/auth/firebase.messaging"]
 
