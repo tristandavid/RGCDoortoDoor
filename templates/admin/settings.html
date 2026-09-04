@@ -1,0 +1,216 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Site Settings | {{ company.name }}{% endblock %}
+{% block page_title %}Site Settings{% endblock %}
+{% block page_subtitle %}<p>Manage site-wide options like the browser tab icon and social links</p>{% endblock %}
+{% block admin_content %}
+
+<div class="grid-2">
+  <div class="admin-card">
+    <h3 style="margin-top:0;">Website Icon (Favicon)</h3>
+    <p style="color:var(--text-muted);">
+      This is the small icon shown in the browser tab. Upload a square
+      image (PNG, JPG, SVG, or ICO work best — 512&times;512px or so).
+    </p>
+
+    {% if favicon_url %}
+      <div style="display:flex; align-items:center; gap:16px; margin:20px 0;">
+        <img src="{{ favicon_url }}" alt="Current site icon" style="width:64px; height:64px; border-radius:10px; border:1px solid var(--border); object-fit:cover;">
+        <div>
+          <p style="margin:0 0 4px; font-weight:700;">Current icon</p>
+          <form method="post" action="{{ url_for('admin_settings_remove_favicon') }}" onsubmit="return confirm('Remove the custom icon and go back to the default?');">
+            <button type="submit" class="btn btn-small btn-danger">Remove &amp; use default</button>
+          </form>
+        </div>
+      </div>
+    {% else %}
+      <p style="color:var(--text-muted);">No custom icon set yet &mdash; the site is using its default icon.</p>
+    {% endif %}
+
+    <form class="admin-form" method="post" enctype="multipart/form-data" style="margin-top:20px;">
+      <div>
+        <label for="favicon">Upload New Icon</label>
+        <input type="file" id="favicon" name="favicon" accept=".png,.jpg,.jpeg,.svg,.ico" required>
+      </div>
+      <div>
+        <button type="submit" class="btn btn-primary">Upload</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="admin-card">
+    <h3 style="margin-top:0;">Social Media Links</h3>
+    <p style="color:var(--text-muted);">
+      Paste the links to your social media pages below. Icons for a
+      platform only appear in the site footer once a link is set here
+      &mdash; leave a field blank to hide that icon.
+    </p>
+
+    <form class="admin-form" method="post" action="{{ url_for('admin_settings_social') }}" style="margin-top:20px;">
+      {% for key, label in social_platforms %}
+        <div>
+          <label for="{{ key }}">{{ label }}</label>
+          <input type="url" id="{{ key }}" name="{{ key }}" placeholder="https://..." value="{{ social_links.get(key) or '' }}">
+        </div>
+      {% endfor %}
+      <div>
+        <button type="submit" class="btn btn-primary">Save Links</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="admin-card" style="margin-top:20px;">
+  <h3 style="margin-top:0;">Two-Factor Authentication</h3>
+  <p style="color:var(--text-muted); margin-top:-8px;">
+    For your account only ({{ admin_username }}{{ ' — technical account' if not is_owner_account else '' }}).
+    {% if not is_owner_account %}The owner's login has its own, separate two-factor setup.{% endif %}
+  </p>
+
+  {% if new_backup_codes %}
+    <div class="admin-card" style="background:var(--bg-alt); margin-bottom:16px;">
+      <h4 style="margin-top:0;">Your Backup Codes</h4>
+      <p style="color:var(--text-muted); font-size:.9rem;">
+        Save these somewhere safe — this is the only time they'll be shown. If you ever lose access
+        to your authenticator app, each code gets you back in once, in place of a 6-digit code.
+        Regenerating replaces this set and invalidates these.
+      </p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:16px 0; font-family:monospace; font-size:1.05rem;">
+        {% for code in new_backup_codes %}
+          <div style="background:var(--bg); border-radius:8px; padding:10px 14px; text-align:center; letter-spacing:1px;">{{ code }}</div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if mfa_enabled %}
+    <p style="color:var(--text-muted);">
+      <span class="badge badge-published">Enabled</span>
+      A verification code is required to log in here and in the RGC Manager app, on top of the password.
+    </p>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;">
+      <form method="post" action="{{ url_for('admin_settings_mfa_regenerate_backup_codes') }}" onsubmit="return confirm('This replaces your existing backup codes — the old ones will stop working. Continue?');">
+        <button type="submit" class="btn btn-small">Regenerate backup codes</button>
+      </form>
+    </div>
+
+    <form method="post" action="{{ url_for('admin_settings_mfa_disable') }}" style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);" onsubmit="return confirm('Turn off two-factor authentication? Only your password will be needed to log in after this.');">
+      <div>
+        <label for="mfa_disable_password">Confirm your password to turn this off</label>
+        <input type="password" id="mfa_disable_password" name="password" required autocomplete="current-password">
+      </div>
+      <div>
+        <button type="submit" class="btn btn-small btn-danger">Turn off two-factor authentication</button>
+      </div>
+    </form>
+  {% else %}
+    <p style="color:var(--text-muted);">
+      <span class="badge badge-draft">Not enabled</span>
+      Add a second step to the admin login (here and in the RGC Manager app) using an authenticator app like Google Authenticator, Authy, or 1Password.
+    </p>
+    <form method="post" action="{{ url_for('admin_settings_mfa_enable') }}" style="margin-top:16px;">
+      <button type="submit" class="btn btn-primary">Set up two-factor authentication</button>
+    </form>
+  {% endif %}
+</div>
+
+<div class="admin-card" style="margin-top:20px;">
+  <h3 style="margin-top:0;">Backup &amp; Restore</h3>
+  <p style="color:var(--text-muted); margin-top:-8px;">
+    Download a snapshot of your data and files so you can recover quickly if something goes wrong.
+    Keep both backups together — you'll need the database <em>and</em> the files to do a full restore.
+  </p>
+
+  <div class="grid-2" style="margin-top:20px; gap:20px;">
+
+    <!-- DATABASE BACKUP -->
+    <div style="background:var(--bg-alt); border-radius:12px; padding:20px; border:1px solid var(--border);">
+      <h4 style="margin-top:0; display:flex; align-items:center; gap:8px;">
+        <span style="font-size:1.4rem;">🗄️</span> Database Backup
+      </h4>
+      <p style="color:var(--text-muted); font-size:.9rem; margin-bottom:16px;">
+        Exports all orders, products, customers, settings, and other site data as a
+        <code>.json</code> file. This does <strong>not</strong> include uploaded images.
+      </p>
+      <a href="{{ url_for('admin_backup_database') }}" class="btn btn-primary" style="display:inline-block;">
+        ⬇️ Download Database Backup
+      </a>
+
+      <hr style="border:none; border-top:1px solid var(--border); margin:20px 0;">
+
+      <h5 style="margin-top:0;">Restore Database</h5>
+      <p style="color:var(--text-muted); font-size:.85rem; margin-bottom:12px;">
+        Upload a <code>.json</code> file previously downloaded from this page.
+        <strong>Existing data will be replaced</strong> — this cannot be undone.
+      </p>
+      <form class="admin-form" method="post"
+            action="{{ url_for('admin_restore_database') }}"
+            enctype="multipart/form-data"
+            onsubmit="return confirm('⚠️ This will overwrite your current database with the backup. Are you sure?');">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+          <div style="flex:1; min-width:180px;">
+            <label for="db_backup" style="font-size:.85rem;">Select database backup (.json)</label>
+            <input type="file" id="db_backup" name="db_backup" accept=".json" required>
+          </div>
+          <div>
+            <button type="submit" class="btn btn-small btn-danger">⬆️ Restore</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- FILES BACKUP -->
+    <div style="background:var(--bg-alt); border-radius:12px; padding:20px; border:1px solid var(--border);">
+      <h4 style="margin-top:0; display:flex; align-items:center; gap:8px;">
+        <span style="font-size:1.4rem;">🖼️</span> Files Backup
+      </h4>
+      <p style="color:var(--text-muted); font-size:.9rem; margin-bottom:16px;">
+        Exports all uploaded images and files (product photos, favicon, branding, and pickup invoices) as a
+        <code>.zip</code> file. Restore this alongside the database backup for a complete recovery.
+      </p>
+      <a href="{{ url_for('admin_backup_files') }}" class="btn btn-primary" style="display:inline-block;">
+        ⬇️ Download Files Backup
+      </a>
+
+      <hr style="border:none; border-top:1px solid var(--border); margin:20px 0;">
+
+      <h5 style="margin-top:0;">Restore Files</h5>
+      <p style="color:var(--text-muted); font-size:.85rem; margin-bottom:12px;">
+        Upload a <code>.zip</code> file previously downloaded from this page.
+        Existing files with the same names will be <strong>overwritten</strong>.
+      </p>
+      <form class="admin-form" method="post"
+            action="{{ url_for('admin_restore_files') }}"
+            enctype="multipart/form-data"
+            onsubmit="return confirm('⚠️ This will overwrite your current uploaded files with the backup. Are you sure?');">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+          <div style="flex:1; min-width:180px;">
+            <label for="files_backup" style="font-size:.85rem;">Select files backup (.zip)</label>
+            <input type="file" id="files_backup" name="files_backup" accept=".zip" required>
+          </div>
+          <div>
+            <button type="submit" class="btn btn-small btn-danger">⬆️ Restore</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+  </div>
+
+  <div style="background:#fff8e1; border:1px solid #ffe082; border-radius:8px; padding:14px 16px; margin-top:16px; font-size:.875rem; color:var(--text-muted);">
+    💡 <strong>Tip:</strong> Download both backups regularly and store them somewhere safe off this
+    server (e.g. Google Drive, Dropbox, a USB drive). Backups stored only on this machine won't
+    help if the server itself fails.
+  </div>
+
+  <div style="background:#ffebee; border:1px solid #ffcdd2; border-radius:8px; padding:14px 16px; margin-top:12px; font-size:.875rem; color:var(--text-muted);">
+    <strong>⚠️ Just restored a database backup and new orders/pickups are failing to save?</strong>
+    Click the button below to fix it — this is safe to run any time and only needs to be run once
+    after a restore.
+    <form method="post" action="{{ url_for('admin_fix_sequences') }}" style="margin-top:10px;">
+      <button type="submit" class="btn btn-small">Fix Database Sequences</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

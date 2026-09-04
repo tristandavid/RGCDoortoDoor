@@ -1,0 +1,37 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Set Up Two-Factor Authentication | {{ company.name }}{% endblock %}
+{% block page_title %}Set Up Two-Factor Authentication{% endblock %}
+{% block page_subtitle %}<p>Scan the code with an authenticator app, then confirm with a code to finish turning it on</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card" style="max-width:520px;">
+  <h3 style="margin-top:0;">1. Scan this QR code</h3>
+  <p style="color:var(--text-muted);">
+    Using Google Authenticator, Authy, 1Password, or any other TOTP
+    authenticator app, scan this code — it'll add "{{ admin_username or 'Admin' }} — {{ company.name }} ({{ admin_account_label }})" to the app.
+  </p>
+  <div style="text-align:center; margin:20px 0;">
+    <img src="{{ url_for('admin_settings_mfa_qr') }}" alt="Two-factor setup QR code" width="220" height="220" style="border:1px solid var(--border); border-radius:10px; padding:12px; background:#fff;">
+  </div>
+  <p style="color:var(--text-muted); font-size:0.9rem;">
+    Can't scan a code? Enter this key manually instead:<br>
+    <code style="display:inline-block; margin-top:6px; padding:8px 12px; background:var(--bg-alt); border-radius:8px; letter-spacing:1px; word-break:break-all;">{{ secret }}</code>
+  </p>
+
+  <h3>2. Confirm with a code</h3>
+  <p style="color:var(--text-muted);">Enter the current 6-digit code from the app to finish turning on two-factor authentication.</p>
+  <form method="post" class="admin-form">
+    <div>
+      <label for="code">Verification Code</label>
+      <input type="text" id="code" name="code" required autofocus autocomplete="one-time-code" inputmode="numeric" maxlength="6" placeholder="123456">
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button type="submit" class="btn btn-primary">Confirm &amp; Turn On</button>
+    </div>
+  </form>
+  <form method="post" action="{{ url_for('admin_settings_mfa_setup_cancel') }}" style="margin-top:10px;">
+    <button type="submit" class="btn btn-small">Cancel setup</button>
+  </form>
+</div>
+
+{% endblock %}

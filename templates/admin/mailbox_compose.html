@@ -1,0 +1,29 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Compose Message | Mailbox | {{ company.name }}{% endblock %}
+{% block page_title %}Compose Message{% endblock %}
+{% block page_subtitle %}<p>Starts a new conversation, or continues an existing one if the address already has a thread</p>{% endblock %}
+{% block admin_content %}
+
+<a href="{{ url_for('admin_mailbox') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary); margin-bottom:20px; display:inline-block;">&larr; Back to Mailbox</a>
+
+<div class="admin-card" style="max-width:760px;">
+  <form class="admin-form" method="post">
+    <div>
+      <label for="to_email">To (email address)</label>
+      <input type="email" id="to_email" name="to_email" placeholder="someone@example.com" required>
+    </div>
+    <div>
+      <label for="subject">Subject</label>
+      <input type="text" id="subject" name="subject" required>
+    </div>
+    <div>
+      <label for="compose-body">Message</label>
+      <textarea id="compose-body" name="body" rows="8" placeholder="Type your message&hellip;" required></textarea>
+    </div>
+    <div>
+      <button type="submit" class="btn btn-primary">Send</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

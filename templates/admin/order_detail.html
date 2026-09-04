@@ -1,0 +1,83 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Order {{ order.order_number }} | {{ company.name }}{% endblock %}
+{% block page_title %}Order {{ order.order_number }}{% endblock %}
+{% block page_subtitle %}<p><span class="badge {{ order.status_badge_class }}">{{ order.status }}</span></p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-actions" style="margin-bottom:20px;">
+  <a href="{{ url_for('admin_orders') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary);">&larr; Back to Orders</a>
+  <a href="{{ url_for('admin_order_invoice', order_id=order.id) }}" class="btn btn-primary" target="_blank">📄 View / Download Invoice</a>
+</div>
+
+<div class="grid-2">
+  <div class="admin-card">
+    <h3 style="margin-top:0;">Customer</h3>
+    <p>
+      <strong>{{ order.customer_name }}</strong><br>
+      {{ order.customer_email }}<br>
+      {% if order.customer_phone %}{{ order.customer_phone }}<br>{% endif %}
+    </p>
+
+    {% if order.shipping_address %}
+      <h3>Shipping / Pickup Notes</h3>
+      <p style="white-space:pre-wrap;">{{ order.shipping_address }}</p>
+    {% endif %}
+
+    {% if order.notes %}
+      <h3>Order Notes</h3>
+      <p style="white-space:pre-wrap;">{{ order.notes }}</p>
+    {% endif %}
+
+    <h3>Update Status</h3>
+    <form class="admin-form" method="post" action="{{ url_for('admin_order_update_status', order_id=order.id) }}" style="max-width:300px;">
+      <div>
+        <select name="status">
+          {% for s in statuses %}
+            <option value="{{ s }}" {% if s == order.status %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <button type="submit" class="btn btn-primary">Save Status</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="admin-card">
+    <h3 style="margin-top:0;">Items</h3>
+    <div class="table-scroll">
+<table class="admin-table">
+      <thead>
+        <tr><th>Item</th><th>Qty</th><th>Unit</th><th>Subtotal</th></tr>
+      </thead>
+      <tbody>
+        {% for item in order.items %}
+        <tr>
+          <td>{{ item.product_name }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>${{ "%.2f"|format(item.unit_price) }}</td>
+          <td>${{ "%.2f"|format(item.subtotal) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+</div>
+    <div style="margin-top:12px; max-width:260px; margin-left:auto;">
+      <div style="display:flex; justify-content:space-between; color:var(--text-muted);">
+        <span>Subtotal</span><span>${{ "%.2f"|format(order.subtotal) }}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; color:var(--text-muted); margin-top:4px;">
+        <span>HST (13%)</span><span>${{ "%.2f"|format(order.tax_amount or 0) }}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1.1rem; color:var(--primary-dark); margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
+        <span>Total</span><span>${{ "%.2f"|format(order.total) }} CAD</span>
+      </div>
+    </div>
+    <div class="note-box" style="margin-top:16px;">
+      💵 Waiting on an Interac e-Transfer for ${{ "%.2f"|format(order.total) }}
+      to {{ company.contact_email }}, referencing order {{ order.order_number }}.
+    </div>
+  </div>
+</div>
+
+{% endblock %}

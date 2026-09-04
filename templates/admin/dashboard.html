@@ -1,0 +1,50 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Manage Updates | {{ company.name }}{% endblock %}
+{% block page_title %}Updates{% endblock %}
+{% block page_subtitle %}<p>Create announcements, news, and promotions for the site</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <a href="{{ url_for('admin_post_new') }}" class="btn btn-primary">+ New Post</a>
+
+  <div class="table-scroll">
+<table class="admin-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for post in posts %}
+      <tr>
+        <td>{{ post.title }}</td>
+        <td>
+          {% if post.is_published %}
+            <span class="badge badge-published">Published</span>
+          {% else %}
+            <span class="badge badge-draft">Draft</span>
+          {% endif %}
+        </td>
+        <td>{{ post.created_at.strftime('%b %d, %Y') }}</td>
+        <td>
+          <div class="admin-actions">
+            <a href="{{ url_for('update_detail', post_id=post.id) }}" class="btn btn-small btn-outline" style="color:var(--primary); border-color:var(--primary);">View</a>
+            <a href="{{ url_for('admin_post_edit', post_id=post.id) }}" class="btn btn-small btn-primary">Edit</a>
+            <form method="post" action="{{ url_for('admin_post_delete', post_id=post.id) }}" onsubmit="return confirm('Delete this post? This cannot be undone.');" style="display:inline;">
+              <button type="submit" class="btn btn-small btn-danger">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">No posts yet. Create your first one above.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+
+{% endblock %}

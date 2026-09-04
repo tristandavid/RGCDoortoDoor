@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Empty Box Sales | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="container">
+    <h1>Empty Box Sales</h1>
+    <p>Sturdy, ready-to-pack boxes for your next balikbayan shipment</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <h2>Get Boxed Up the Right Way</h2>
+      <p>We sell durable, double-walled boxes built to survive the journey
+        door-to-door &mdash; from your home in Canada to your family's home in
+        the Philippines.</p>
+    </div>
+    {% if products %}
+      {% include "_product_grid.html" %}
+    {% else %}
+      <div class="grid-3">
+        <div class="card">
+          <span class="icon">📦</span>
+          <h3>Small Box</h3>
+          <p>Perfect for clothes, small gifts, and lightweight items. Easy to
+            carry and quick to fill.</p>
+        </div>
+        <div class="card">
+          <span class="icon">📦</span>
+          <h3>Medium Box</h3>
+          <p>Our most popular size &mdash; ideal for a balanced mix of canned
+            goods, clothing, and household items.</p>
+        </div>
+        <div class="card">
+          <span class="icon">📦</span>
+          <h3>Large Box</h3>
+          <p>Maximum capacity for families sending a bigger care package home.
+            Reinforced for heavier loads.</p>
+        </div>
+      </div>
+    {% endif %}
+    <div class="section-header" style="margin-top:48px;">
+      <p>Contact us for current box sizes, availability, and pricing &mdash;
+        we're happy to help you choose the right box for what you're sending.</p>
+      <a href="{{ url_for('contact_us') }}" class="btn btn-primary">Contact Us</a>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

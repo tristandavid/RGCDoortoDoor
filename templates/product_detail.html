@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="container pd-wrap">
+  <p class="pd-breadcrumb">
+    <a href="{{ url_for(shop_endpoint) }}">&larr; {{ product.category_label }}s</a>
+  </p>
+
+  <div class="pd-layout">
+    <div class="pd-media">
+      {% set gallery = product.gallery_image_urls %}
+      {% if gallery %}
+        {% if gallery|length > 1 %}
+          <div class="pd-thumbs">
+            {% for img_url in gallery %}
+              <button type="button" class="pd-thumb-btn{{ ' active' if loop.first }}" data-img="{{ img_url }}" aria-label="Show photo {{ loop.index }}">
+                <img src="{{ img_url }}" alt="">
+              </button>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div class="pd-main-image-wrap">
+          <img src="{{ gallery[0] }}" alt="{{ product.name }}" class="pd-media-img product-image" id="pd-main-image">
+        </div>
+      {% else %}
+        <div class="pd-media-placeholder" aria-hidden="true">📦</div>
+      {% endif %}
+    </div>
+
+    <div class="pd-info">
+      <h1 class="pd-title">{{ product.name }}</h1>
+      <p class="pd-badge">{{ product.category_label }}</p>
+      <div class="pd-divider"></div>
+      {% if product.price is not none %}
+        <div class="pd-price-block">
+          <span class="pd-price-currency">{{ product.currency_symbol }}</span><span class="pd-price-amount">{{ "%.2f"|format(product.price) }}</span>
+          <span class="pd-price-cad">{{ product.currency_code }}</span>
+        </div>
+        {% if not product.is_tax_exempt %}
+          <p class="pd-tax-note">+ 13% HST calculated at checkout</p>
+        {% endif %}
+      {% else %}
+        <p class="pd-price-contact">Contact for pricing</p>
+      {% endif %}
+      <div class="pd-divider"></div>
+      {% if product.description %}<p class="pd-description">{{ product.description }}</p>{% endif %}
+    </div>
+
+    <div class="pd-buybox">
+      {% if product.price is not none %}
+        <div class="pd-buybox-price">{{ product.currency_symbol }}{{ "%.2f"|format(product.price) }} <span>{{ product.currency_code }}</span></div>
+        <p class="pd-buybox-delivery">
+          🚚 <strong>Delivery/Pickup:</strong> Available for pickup at our mobile
+          warehouse, or bundle with your next door-to-door shipment.
+        </p>
+        <p class="pd-buybox-stock">✅ In Stock</p>
+        <p class="pd-buybox-ship">
+          Ships from <strong>{{ company.name }}</strong><br>
+          Sold by <strong>{{ company.name }}</strong>
+        </p>
+
+        <form method="post" action="{{ url_for('cart_add', product_id=product.id) }}" class="pd-buybox-form">
+          <label for="pd-qty" class="pd-qty-label">Quantity:</label>
+          <select id="pd-qty" name="quantity" class="pd-qty-select">
+            {% for n in range(1, 11) %}
+              <option value="{{ n }}">{{ n }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn pd-btn-cart">Add to Cart</button>
+        </form>
+        <form method="post" action="{{ url_for('cart_add', product_id=product.id) }}" class="pd-buybox-form">
+          <input type="hidden" name="quantity" value="1">
+          <input type="hidden" name="buy_now" value="1">
+          <button type="submit" class="btn pd-btn-buy">Buy Now</button>
+        </form>
+
+        <p class="pd-buybox-secure">🔒 Secure checkout{% if not product.is_tax_exempt %} &middot; Interac e-Transfer{% endif %}</p>
+      {% else %}
+        <div class="pd-buybox-price pd-price-contact">Contact for pricing</div>
+        <a href="{{ url_for('contact_us') }}" class="btn pd-btn-cart" style="text-align:center;">Contact Us</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if related %}
+    <div class="pd-related">
+      <h2>You may also like</h2>
+      {% with products = related %}
+        {% include "_product_grid.html" %}
+      {% endwith %}
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

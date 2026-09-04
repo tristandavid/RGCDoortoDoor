@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Admin Login | {{ company.name }}{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container">
+    <div class="login-box">
+      <h2 style="margin-top:0;">Admin Login</h2>
+      <p style="color:var(--text-muted);">Sign in to manage updates, tracking, products, and site settings. You'll stay signed in for 30 days.</p>
+      <form method="post" class="admin-form">
+        <div>
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required autofocus autocomplete="username">
+        </div>
+        <div>
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary">Log In</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

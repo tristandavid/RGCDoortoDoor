@@ -1,0 +1,36 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Pages | {{ company.name }}{% endblock %}
+{% block page_title %}Pages{% endblock %}
+{% block page_subtitle %}<p>Edit the text shown on these pages without touching any code</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <p style="color:var(--text-muted); margin-bottom:20px;">
+    About Us isn't listed here — its layout (timeline, feature cards) is
+    hand-built and needs a code change to update.
+  </p>
+  <div class="table-scroll">
+<table class="admin-table">
+    <thead>
+      <tr>
+        <th>Page</th>
+        <th>Last updated</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for page in pages %}
+      <tr>
+        <td>{{ page.label }}</td>
+        <td>{{ page.updated_at.strftime('%b %d, %Y') }}</td>
+        <td>
+          <a href="{{ url_for('admin_page_edit', slug=page.slug) }}" class="btn btn-small">Edit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+
+{% endblock %}

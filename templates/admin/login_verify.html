@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Verification Code | {{ company.name }}{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container">
+    <div class="login-box">
+      <h2 style="margin-top:0;">Enter Your Code</h2>
+      <p style="color:var(--text-muted);">Open your authenticator app and enter the current 6-digit code. Lost your phone? You can use one of your backup codes instead.</p>
+      <form method="post" class="admin-form">
+        <div>
+          <label for="code">Verification Code</label>
+          <input type="text" id="code" name="code" required autofocus autocomplete="one-time-code" inputmode="numeric" pattern="[0-9A-Za-z\-]*" maxlength="9" placeholder="123456">
+        </div>
+        <button type="submit" class="btn btn-primary">Verify</button>
+      </form>
+      <p style="margin-top:16px;"><a href="{{ url_for('admin_login_verify_cancel') }}">&larr; Not you? Back to login</a></p>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

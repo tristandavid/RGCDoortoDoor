@@ -1,0 +1,41 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Manage Orders | {{ company.name }}{% endblock %}
+{% block page_title %}Orders{% endblock %}
+{% block page_subtitle %}<p>Customer orders paid by Interac e-Transfer</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <div class="table-scroll">
+<table class="admin-table">
+    <thead>
+      <tr>
+        <th>Order #</th>
+        <th>Customer</th>
+        <th>Total</th>
+        <th>Status</th>
+        <th>Date</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for order in orders %}
+      <tr>
+        <td><span style="font-family:monospace; font-weight:700;">{{ order.order_number }}</span></td>
+        <td>
+          {{ order.customer_name }}<br>
+          <span style="color:var(--text-muted); font-size:0.85rem;">{{ order.customer_email }}</span>
+        </td>
+        <td>${{ "%.2f"|format(order.total) }}</td>
+        <td><span class="badge {{ order.status_badge_class }}">{{ order.status }}</span></td>
+        <td>{{ order.created_at.strftime('%b %d, %Y') }}</td>
+        <td><a href="{{ url_for('admin_order_detail', order_id=order.id) }}" class="btn btn-small btn-primary">View</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">No orders yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+
+{% endblock %}

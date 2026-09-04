@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Members Only | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="container">
+    <h1>Combo Box</h1>
+    <p>Ready-made bundles of household essentials &mdash; available to signed-in members</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container" style="max-width:520px;">
+    <div class="members-only-card">
+      <span class="members-only-icon" aria-hidden="true">🔒</span>
+      <h2>Sign In to View Combo Box</h2>
+      <p>Combo Box bundles are available to registered customers only.
+        Sign in to your account, or create one for free, to see what's
+        included and place an order.</p>
+      <div class="members-only-actions">
+        <a href="{{ login_url }}" class="btn btn-primary">Sign In</a>
+        <a href="{{ register_url }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary);">Create Account</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

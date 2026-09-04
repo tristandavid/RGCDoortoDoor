@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Combo Box | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="container">
+    <h1>Combo Box</h1>
+    <p>Ready-made bundles of household essentials &mdash; stock up for home, or
+      start your own tindahan/online selling business</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <h2>Everything You Need, Bundled Together</h2>
+      <p>Each Combo Box is packed with a curated mix of household, grocery,
+        and everyday essentials. Great for stocking your own home, or as
+        starter inventory for a sari-sari store or online selling business.
+        Click a box below to see everything that's included.</p>
+    </div>
+    {% if products %}
+      {% include "_product_grid.html" %}
+    {% else %}
+      <p style="text-align:center; color:var(--text-muted);">
+        Combo Box bundles are coming soon &mdash; check back shortly, or
+        <a href="{{ url_for('contact_us') }}">contact us</a> for availability.
+      </p>
+    {% endif %}
+    <div class="section-header" style="margin-top:48px;">
+      <p>Have a custom bundle in mind? We're happy to put together a combo
+        box tailored to what you or your business needs.</p>
+      <a href="{{ url_for('contact_us') }}" class="btn btn-primary">Contact Us</a>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

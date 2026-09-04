@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Checkout | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="container">
+    <h1>Checkout</h1>
+    <p>Pay by Interac e-Transfer &mdash; instructions are shown after you place your order</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container contact-grid">
+    <div class="contact-info">
+      <h3>Order Summary</h3>
+      <ul>
+        {% for item in items %}
+          <li>{{ item.quantity }} &times; {{ item.product.name }} &mdash; {{ item.product.currency_symbol }}{{ "%.2f"|format(item.subtotal) }}</li>
+        {% endfor %}
+      </ul>
+      <div style="margin-top:16px; max-width:280px;">
+        <div style="display:flex; justify-content:space-between; color:var(--text-muted);">
+          <span>Subtotal</span><span>{{ currency_symbol }}{{ "%.2f"|format(subtotal) }}</span>
+        </div>
+        {% if tax %}
+          <div style="display:flex; justify-content:space-between; color:var(--text-muted); margin-top:4px;">
+            <span>HST (13%)</span><span>{{ currency_symbol }}{{ "%.2f"|format(tax) }}</span>
+          </div>
+        {% endif %}
+        <div style="display:flex; justify-content:space-between; font-weight:800; color:var(--primary-dark); margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
+          <span>Total</span><span>{{ currency_symbol }}{{ "%.2f"|format(total) }} {{ currency_code }}</span>
+        </div>
+      </div>
+      <div class="note-box">
+        💵 Total: {{ currency_symbol }}{{ "%.2f"|format(total) }} {{ currency_code }} &mdash; payable by Interac e-Transfer
+        to {{ company.contact_email }} once your order is placed.
+      </div>
+    </div>
+    <div>
+      {% if current_customer %}
+        <div class="note-box" style="margin-bottom:1rem;">
+          ✅ Logged in as <strong>{{ current_customer.name }}</strong> — your details have been pre-filled.
+        </div>
+      {% else %}
+        <div class="note-box" style="margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+          <span>Have an account? Sign in to skip re-typing your details.</span>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="{{ url_for('customer_login', next=request.path) }}" class="btn btn-small btn-outline">Sign In</a>
+            <a href="{{ url_for('customer_login', tab='register', next=request.path) }}" class="btn btn-small btn-primary">Create Account</a>
+          </div>
+        </div>
+        <p style="color:var(--text-muted); font-size:0.9rem; margin:-4px 0 1rem;">
+          No account needed — you can also just fill out the form below to check out as a guest.
+        </p>
+      {% endif %}
+      <form class="contact-form card" method="post">
+        <h3 style="margin-top:0;">Your Details</h3>
+        <div>
+          <label for="name">Full Name *</label>
+          <input type="text" id="name" name="name" required
+                 value="{{ request.form.get('name') or (prefill.name if prefill else '') }}">
+        </div>
+        <div>
+          <label for="email">Email *</label>
+          <input type="email" id="email" name="email" placeholder="you@example.com" required
+                 value="{{ request.form.get('email') or (prefill.email if prefill else '') }}">
+        </div>
+        <div>
+          <label for="phone">Phone (optional)</label>
+          <input type="text" id="phone" name="phone"
+                 value="{{ request.form.get('phone') or (prefill.phone if prefill else '') }}">
+        </div>
+        <div>
+          <label for="address">Shipping Address / Pickup Notes</label>
+          <textarea id="address" name="address" placeholder="Where should this go, or how would you like to arrange pickup?">{{ request.form.get('address') or (prefill.address if prefill else '') }}</textarea>
+        </div>
+        <div>
+          <label for="notes">Order Notes (optional)</label>
+          <textarea id="notes" name="notes">{{ request.form.get('notes', '') }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" style="align-self:flex-start;">Place Order</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

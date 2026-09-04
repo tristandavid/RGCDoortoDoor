@@ -1,0 +1,97 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}New Invoice | {{ company.name }}{% endblock %}
+{% block page_title %}New Invoice{% endblock %}
+{% block page_subtitle %}<p>For anything outside the normal product shop &mdash; typed in by hand</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <form class="admin-form" method="post">
+    <div class="form-row form-row-2col">
+      <div>
+        <label for="customer_name">Bill To (Name) *</label>
+        <input type="text" id="customer_name" name="customer_name" value="{{ form.get('customer_name', '') }}" placeholder="Customer or business name" required>
+      </div>
+      <div>
+        <label for="issue_date">Invoice Date *</label>
+        <input type="date" id="issue_date" name="issue_date" value="{{ form.get('issue_date', today) }}" required>
+      </div>
+    </div>
+    <div class="form-row form-row-2col">
+      <div>
+        <label for="customer_email">Email (optional)</label>
+        <input type="email" id="customer_email" name="customer_email" value="{{ form.get('customer_email', '') }}" placeholder="customer@example.com">
+      </div>
+      <div>
+        <label for="customer_address">Address (optional)</label>
+        <input type="text" id="customer_address" name="customer_address" value="{{ form.get('customer_address', '') }}" placeholder="Street, city, province">
+      </div>
+    </div>
+
+    <div>
+      <label>Line Items *</label>
+      <div class="table-scroll">
+<table class="admin-table" id="invoice-items-table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th style="width:100px;">Qty</th>
+            <th style="width:140px;">Unit Price</th>
+            <th style="width:40px;"></th>
+          </tr>
+        </thead>
+        <tbody id="invoice-items-body">
+          {% set descriptions = form.getlist('item_description') %}
+          {% set quantities = form.getlist('item_quantity') %}
+          {% set prices = form.getlist('item_unit_price') %}
+          {% if descriptions %}
+            {% for i in range(descriptions|length) %}
+              <tr class="invoice-item-row">
+                <td><input type="text" name="item_description" value="{{ descriptions[i] }}" placeholder="What are you billing for?"></td>
+                <td><input type="number" name="item_quantity" value="{{ quantities[i] if i < quantities|length else '1' }}" min="0" step="0.01"></td>
+                <td><input type="number" name="item_unit_price" value="{{ prices[i] if i < prices|length else '' }}" min="0" step="0.01" placeholder="0.00"></td>
+                <td><button type="button" class="btn btn-small btn-danger remove-item-row" aria-label="Remove row">&times;</button></td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            {% for _ in range(3) %}
+              <tr class="invoice-item-row">
+                <td><input type="text" name="item_description" placeholder="What are you billing for?"></td>
+                <td><input type="number" name="item_quantity" value="1" min="0" step="0.01"></td>
+                <td><input type="number" name="item_unit_price" min="0" step="0.01" placeholder="0.00"></td>
+                <td><button type="button" class="btn btn-small btn-danger remove-item-row" aria-label="Remove row">&times;</button></td>
+              </tr>
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+</div>
+      <button type="button" id="add-invoice-item" class="btn btn-small btn-outline" style="color:var(--primary); border-color:var(--primary); margin-top:10px;">+ Add Item</button>
+    </div>
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="apply_tax" name="apply_tax" {% if form.get('apply_tax') %}checked{% endif %}>
+      <label for="apply_tax" style="font-weight:600;">Add 13% HST</label>
+    </div>
+
+    <div>
+      <label for="notes">Notes (optional, printed on the invoice)</label>
+      <textarea id="notes" name="notes" placeholder="Payment instructions, terms, anything else">{{ form.get('notes', '') }}</textarea>
+    </div>
+
+    <div>
+      <button type="submit" class="btn btn-primary">Create Invoice</button>
+      <a href="{{ url_for('admin_invoices') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary); margin-left:10px;">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<template id="invoice-item-row-template">
+  <tr class="invoice-item-row">
+    <td><input type="text" name="item_description" placeholder="What are you billing for?"></td>
+    <td><input type="number" name="item_quantity" value="1" min="0" step="0.01"></td>
+    <td><input type="number" name="item_unit_price" min="0" step="0.01" placeholder="0.00"></td>
+    <td><button type="button" class="btn btn-small btn-danger remove-item-row" aria-label="Remove row">&times;</button></td>
+  </tr>
+</template>
+
+{% endblock %}

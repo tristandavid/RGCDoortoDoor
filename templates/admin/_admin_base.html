@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Admin | {{ company.name }}{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% if favicon_url %}
+    <link rel="icon" href="{{ favicon_url }}">
+  {% else %}
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+  {% endif %}
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="admin-shell">
+    <aside class="admin-sidebar">
+      <div class="admin-sidebar-brand">
+        <img src="{{ url_for('static', filename='images/logo.webp') }}" alt="{{ company.name }}">
+        <span>RGC Admin</span>
+      </div>
+      <nav class="admin-nav">
+        {% for icon, label, endpoint, endpoints in admin_sections %}
+          <a href="{{ url_for(endpoint) }}" class="{{ 'active' if request.endpoint in endpoints }}"><span class="icon">{{ icon }}</span><span class="label"> {{ label }}</span></a>
+        {% endfor %}
+      </nav>
+      <div class="admin-sidebar-footer">
+        <a href="{{ url_for('home') }}"><span class="icon">🌐</span><span class="label"> View Site</span></a>
+        <a href="{{ url_for('admin_logout') }}"><span class="icon">🚪</span><span class="label"> Log Out</span></a>
+      </div>
+    </aside>
+
+    <div class="admin-main">
+      <div class="admin-topbar">
+        <div class="admin-topbar-titles">
+          <h1>
+            {% if admin_section %}<span class="admin-page-icon" aria-hidden="true">{{ admin_section[0] }}</span>{% endif %}
+            {% block page_title %}Dashboard{% endblock %}
+          </h1>
+          {% block page_subtitle %}{% endblock %}
+          {% if admin_section and admin_section[2] != 'admin_dashboard' %}
+            <a href="{{ url_for('admin_dashboard') }}" class="admin-back-link">&larr; Back to main menu</a>
+          {% endif %}
+        </div>
+        <div class="admin-account">
+          <div class="admin-account-avatar">{{ (admin_username or 'A')[0]|upper }}</div>
+          <span class="admin-account-name">{{ admin_username or 'Admin' }}</span>
+        </div>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="admin-flash-wrap">
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <div class="admin-content">
+        {% block admin_content %}{% endblock %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

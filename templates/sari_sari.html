@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Sari Sari by: Regueca | {{ company.name }}{% endblock %}
+{% block content %}
+
+<section class="hero sari-hero">
+  <div class="container hero-inner">
+    <span class="eyebrow" style="background: rgba(58,34,0,0.12); color:#3a2200;">A TASTE OF HOME</span>
+    <h1>Sari Sari <span style="color:#fff;">by: Regueca</span></h1>
+    <p class="lead" style="color:#3a2200;">
+      Filipino favorites and everyday essentials, right alongside your next
+      box shipment.
+    </p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <h2>What is Sari Sari by: Regueca?</h2>
+      <p>
+        A "sari-sari" store is a small Filipino neighborhood shop &mdash; and
+        that's exactly the spirit behind this side of RGC. Sari Sari by:
+        Regueca brings a taste of home to Filipino-Canadian families,
+        offering snacks, treats, and everyday goods you might normally only
+        find back home.
+      </p>
+    </div>
+    <div class="grid-3">
+      <div class="card">
+        <span class="icon">🍬</span>
+        <h3>Snacks &amp; Treats</h3>
+        <p>Favorite Filipino snacks and sweets to satisfy your cravings.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🥫</span>
+        <h3>Pantry Staples</h3>
+        <p>Everyday goods to keep your kitchen stocked with home-style
+          favorites.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🎁</span>
+        <h3>Pair It With a Box</h3>
+        <p>Add Sari Sari items to your next door-to-door shipment for family
+          back home.</p>
+      </div>
+    </div>
+    {% if products %}
+      <div class="section-header" style="margin-top:48px;">
+        <h2>Shop Sari-Sari Items</h2>
+      </div>
+      {% include "_product_grid.html" %}
+    {% endif %}
+    <div class="section-header" style="margin-top:48px;">
+      <p>Follow along on Instagram <strong>@sari_sari_by_regueca</strong> for
+        the latest goodies, or reach out to us directly to place an order.</p>
+      <a href="{{ url_for('contact_us') }}" class="btn btn-primary">Get in Touch</a>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

@@ -1,0 +1,46 @@
+{# Expects `products` in context. #}
+<p class="shop-count">{{ products|length }} item{{ 's' if products|length != 1 }}</p>
+<div class="shop-grid">
+  {% for product in products %}
+    <div class="shop-card">
+      <a href="{{ url_for('product_detail', product_id=product.id) }}" class="shop-card-media">
+        <span class="shop-card-badge">{{ product.category_label }}</span>
+        {% if product.category == 'combo' %}
+          <span class="shop-card-ribbon">Combo<br>&amp; Save!</span>
+        {% endif %}
+        {% if product.image_url %}
+          <img src="{{ product.image_url }}" alt="{{ product.name }}" class="product-image">
+        {% else %}
+          <div class="shop-card-media-placeholder" aria-hidden="true">📦</div>
+        {% endif %}
+      </a>
+      <div class="shop-card-body">
+        <h3 title="{{ product.name }}"><a href="{{ url_for('product_detail', product_id=product.id) }}" class="shop-card-title-link">{{ product.name }}</a></h3>
+        {% if product.description %}<p>{{ product.description }}</p>{% endif %}
+        <div class="shop-card-footer">
+          <div class="shop-card-price">
+            {% if product.price is not none %}
+              <span class="price-amount">{{ product.currency_symbol }}{{ "%.2f"|format(product.price) }}</span><span class="price-currency">{{ product.currency_code }}</span>
+              {% if not product.is_tax_exempt %}
+                <span class="price-tax-note">+ 13% HST at checkout</span>
+              {% endif %}
+            {% else %}
+              <span class="price-contact">Contact for pricing</span>
+            {% endif %}
+          </div>
+          <div class="shop-card-actions">
+            <a href="{{ url_for('product_detail', product_id=product.id) }}" class="btn-view-details">View Details</a>
+            {% if product.price is not none %}
+              <form method="post" action="{{ url_for('cart_add', product_id=product.id) }}" class="add-to-cart-form">
+                <input type="hidden" name="quantity" value="1">
+                <button type="submit" class="btn btn-primary btn-add-cart">Add to Cart</button>
+              </form>
+            {% else %}
+              <a href="{{ url_for('contact_us') }}" class="btn btn-primary btn-add-cart">Contact Us</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>

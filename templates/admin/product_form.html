@@ -1,0 +1,72 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}{{ 'Edit Product' if product else 'New Product' }} | {{ company.name }}{% endblock %}
+{% block page_title %}{{ 'Edit Product' if product else 'New Product' }}{% endblock %}
+{% block page_subtitle %}<p>Add a packaging item or empty box to sell on the site</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <form class="admin-form" method="post" enctype="multipart/form-data">
+    <div>
+      <label for="category">Category</label>
+      <select id="category" name="category" required>
+        <option value="">Select a category&hellip;</option>
+        {% for value, label in categories %}
+          <option value="{{ value }}" {% if product and product.category == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="name">Product Name</label>
+      <input type="text" id="name" name="name" value="{{ product.name if product else '' }}" placeholder="e.g. Medium Balikbayan Box" required>
+    </div>
+    <div>
+      <label for="description">Description (optional)</label>
+      <textarea id="description" name="description" placeholder="Size, material, what it's good for...">{{ product.description if product and product.description else '' }}</textarea>
+    </div>
+    <div>
+      <label for="price">Price in CAD (optional &mdash; leave blank to show &ldquo;Contact for pricing&rdquo;)</label>
+      <input type="text" id="price" name="price" value="{{ product.price if product and product.price is not none else '' }}" placeholder="e.g. 12.99">
+    </div>
+    <div>
+      <label>Photos (optional)</label>
+      {% if product and product.images %}
+        <p style="color:var(--text-muted); font-size:0.85rem; margin:0 0 10px;">
+          The first photo is used as the cover photo on the shop page. Check a
+          photo to remove it when you save.
+        </p>
+        <div class="product-image-gallery">
+          {% for image in product.images %}
+            <label class="product-image-gallery-item">
+              <img src="{{ image.image_url }}" alt="">
+              <span class="product-image-gallery-remove">
+                <input type="checkbox" name="delete_image_ids" value="{{ image.id }}"> Remove
+              </span>
+            </label>
+          {% endfor %}
+        </div>
+      {% elif product and product.image_url %}
+        {# Legacy single-photo product saved before the gallery existed. #}
+        <img src="{{ product.image_url }}" alt="" class="current-image">
+        <label class="checkbox-row" style="margin:6px 0 10px;">
+          <input type="checkbox" name="clear_legacy_image" value="1">
+          <span>Remove this photo</span>
+        </label>
+      {% endif %}
+      <input type="file" id="image" name="images" accept=".png,.jpg,.jpeg,.gif,.webp" multiple>
+      <p style="color:var(--text-muted); font-size:0.8rem; margin:6px 0 0;">
+        You can select multiple photos at once &mdash; they'll be added to
+        this product's photo gallery.
+      </p>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="is_available" name="is_available" {% if not product or product.is_available %}checked{% endif %}>
+      <label for="is_available" style="font-weight:600;">Available (visible on the public page)</label>
+    </div>
+    <div>
+      <button type="submit" class="btn btn-primary">{{ 'Save Changes' if product else 'Create Product' }}</button>
+      <a href="{{ url_for('admin_products') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary); margin-left:10px;">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

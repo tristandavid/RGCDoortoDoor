@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Order {{ order.order_number }} | {{ company.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="container">
+    <h1>Thank You, {{ order.customer_name }}!</h1>
+    <p>Your order has been received</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container" style="max-width:640px;">
+    <div class="card">
+      <h3 style="margin-top:0;">Order {{ order.order_number }}</h3>
+      <ul style="list-style:none; padding:0; margin:0;">
+        {% for item in order.items %}
+          <li style="padding:8px 0; border-bottom:1px dashed var(--border);">
+            {{ item.quantity }} &times; {{ item.product_name }} &mdash; ${{ "%.2f"|format(item.subtotal) }}
+          </li>
+        {% endfor %}
+      </ul>
+      <div style="margin-top:16px; max-width:280px; margin-left:auto;">
+        <div style="display:flex; justify-content:space-between; color:var(--text-muted);">
+          <span>Subtotal</span><span>${{ "%.2f"|format(order.subtotal) }}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; color:var(--text-muted); margin-top:4px;">
+          <span>HST (13%)</span><span>${{ "%.2f"|format(order.tax_amount or 0) }}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1.15rem; color:var(--primary-dark); margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
+          <span>Total</span><span>${{ "%.2f"|format(order.total) }} CAD</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="note-box" style="margin-top:24px;">
+      💵 <strong>To complete your order</strong>, send an Interac e-Transfer for
+      <strong>${{ "%.2f"|format(order.total) }} CAD</strong> to
+      <strong>{{ company.contact_email }}</strong>, and include your order number
+      <strong>{{ order.order_number }}</strong> in the message/memo field so we can
+      match your payment to this order. If a security question is required, contact
+      us at {{ company.contact_email }} for the answer.
+    </div>
+
+    <p style="margin-top:24px; color:var(--text-muted);">
+      A confirmation email with these details has been sent to {{ order.customer_email }}.
+      Keep your order number, <strong>{{ order.order_number }}</strong>, for your records.
+    </p>
+
+    <div style="margin-top:20px;">
+      <a href="{{ url_for('order_invoice', order_number=order.order_number) }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary);" target="_blank">🧾 Download Invoice (PDF)</a>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

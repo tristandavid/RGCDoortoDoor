@@ -1,0 +1,57 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Manage Products | {{ company.name }}{% endblock %}
+{% block page_title %}Products{% endblock %}
+{% block page_subtitle %}<p>Post packaging items, empty boxes, and Sari-Sari items for sale on the site</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <div class="admin-actions" style="margin-bottom:18px;">
+    <a href="{{ url_for('admin_product_new') }}" class="btn btn-primary">+ New Product</a>
+    <a href="{{ url_for('admin_products') }}" class="btn btn-small {{ 'btn-primary' if not active_category else 'btn-outline' }}" style="{{ '' if not active_category else 'color:var(--primary); border-color:var(--primary);' }}">All</a>
+    {% for value, label in categories %}
+      <a href="{{ url_for('admin_products', category=value) }}" class="btn btn-small {{ 'btn-primary' if active_category == value else 'btn-outline' }}" style="{{ '' if active_category == value else 'color:var(--primary); border-color:var(--primary);' }}">{{ label }}s</a>
+    {% endfor %}
+  </div>
+
+  <div class="table-scroll">
+<table class="admin-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Category</th>
+        <th>Price</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for product in products %}
+      <tr>
+        <td>{{ product.name }}</td>
+        <td>{{ product.category_label }}</td>
+        <td>{% if product.price is not none %}${{ "%.2f"|format(product.price) }}{% else %}Contact for pricing{% endif %}</td>
+        <td>
+          {% if product.is_available %}
+            <span class="badge badge-published">Available</span>
+          {% else %}
+            <span class="badge badge-draft">Hidden</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="admin-actions">
+            <a href="{{ url_for('admin_product_edit', product_id=product.id) }}" class="btn btn-small btn-primary">Edit</a>
+            <form method="post" action="{{ url_for('admin_product_delete', product_id=product.id) }}" onsubmit="return confirm('Delete this product? This cannot be undone.');" style="display:inline;">
+              <button type="submit" class="btn btn-small btn-danger">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">No products yet. Create your first one above.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+
+{% endblock %}
