@@ -368,9 +368,10 @@ def _push_to_all_devices(type_, title, body):
     """Send a push to every registered FCM token. Runs in a background thread
     so it never blocks the request that triggered it."""
     def _send():
-        tokens = FcmToken.query.all()
-        for t in tokens:
-            _send_fcm_push(t.token, type_, title, body)
+        with app.app_context():
+            tokens = FcmToken.query.all()
+            for t in tokens:
+                _send_fcm_push(t.token, type_, title, body)
     threading.Thread(target=_send, daemon=True).start()
 
 
