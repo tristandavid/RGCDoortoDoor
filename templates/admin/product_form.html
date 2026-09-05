@@ -24,8 +24,12 @@
       <textarea id="description" name="description" placeholder="Size, material, what it's good for...">{{ product.description if product and product.description else '' }}</textarea>
     </div>
     <div>
-      <label for="price">Price in CAD (optional &mdash; leave blank to show &ldquo;Contact for pricing&rdquo;)</label>
+      <label for="price">Price (optional &mdash; leave blank to show &ldquo;Contact for pricing&rdquo;)</label>
       <input type="text" id="price" name="price" value="{{ product.price if product and product.price is not none else '' }}" placeholder="e.g. 12.99">
+      <p style="color:var(--text-muted); font-size:0.85rem; margin:6px 0 0;">
+        Enter Combo Box prices in Philippine Pesos (&#8369;) &mdash; they display in pesos
+        and are exempt from the 13% HST. Every other category is priced in CAD.
+      </p>
     </div>
     <div>
       <label>Photos (optional)</label>

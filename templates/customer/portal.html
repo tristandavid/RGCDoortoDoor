@@ -69,7 +69,7 @@
                 <td><strong>{{ order.order_number }}</strong></td>
                 <td>{{ order.created_at.strftime('%b %d, %Y') }}</td>
                 <td>{{ order.items|length }} item{% if order.items|length != 1 %}s{% endif %}</td>
-                <td>${{ "%.2f"|format(order.total) }}</td>
+                <td>{{ order.currency_symbol }}{{ "%.2f"|format(order.total) }}</td>
                 <td><span class="badge {{ order.status_badge_class }}">{{ order.status }}</span></td>
                 <td>
                   <a href="{{ url_for('order_confirmation', order_number=order.order_number) }}" class="btn btn-sm btn-outline">View Details</a>

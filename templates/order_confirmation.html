@@ -16,26 +16,29 @@
       <ul style="list-style:none; padding:0; margin:0;">
         {% for item in order.items %}
           <li style="padding:8px 0; border-bottom:1px dashed var(--border);">
-            {{ item.quantity }} &times; {{ item.product_name }} &mdash; ${{ "%.2f"|format(item.subtotal) }}
+            {{ item.quantity }} &times; {{ item.product_name }} &mdash; {{ order.currency_symbol }}{{ "%.2f"|format(item.subtotal) }}
           </li>
         {% endfor %}
       </ul>
       <div style="margin-top:16px; max-width:280px; margin-left:auto;">
         <div style="display:flex; justify-content:space-between; color:var(--text-muted);">
-          <span>Subtotal</span><span>${{ "%.2f"|format(order.subtotal) }}</span>
+          <span>Subtotal</span><span>{{ order.currency_symbol }}{{ "%.2f"|format(order.subtotal) }}</span>
         </div>
+        {# Peso-priced orders (Combo Box) are HST-exempt -- no tax row at all. #}
+        {% if order.has_tax %}
         <div style="display:flex; justify-content:space-between; color:var(--text-muted); margin-top:4px;">
-          <span>HST (13%)</span><span>${{ "%.2f"|format(order.tax_amount or 0) }}</span>
+          <span>HST (13%)</span><span>{{ order.currency_symbol }}{{ "%.2f"|format(order.tax_amount) }}</span>
         </div>
+        {% endif %}
         <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1.15rem; color:var(--primary-dark); margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
-          <span>Total</span><span>${{ "%.2f"|format(order.total) }} CAD</span>
+          <span>Total</span><span>{{ order.currency_symbol }}{{ "%.2f"|format(order.total) }} {{ order.currency }}</span>
         </div>
       </div>
     </div>
 
     <div class="note-box" style="margin-top:24px;">
       💵 <strong>To complete your order</strong>, send an Interac e-Transfer for
-      <strong>${{ "%.2f"|format(order.total) }} CAD</strong> to
+      <strong>{{ order.currency_symbol }}{{ "%.2f"|format(order.total) }} {{ order.currency }}</strong> to
       <strong>{{ company.contact_email }}</strong>, and include your order number
       <strong>{{ order.order_number }}</strong> in the message/memo field so we can
       match your payment to this order. If a security question is required, contact

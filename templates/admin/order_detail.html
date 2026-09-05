@@ -55,8 +55,8 @@
         <tr>
           <td>{{ item.product_name }}</td>
           <td>{{ item.quantity }}</td>
-          <td>${{ "%.2f"|format(item.unit_price) }}</td>
-          <td>${{ "%.2f"|format(item.subtotal) }}</td>
+          <td>{{ order.currency_symbol }}{{ "%.2f"|format(item.unit_price) }}</td>
+          <td>{{ order.currency_symbol }}{{ "%.2f"|format(item.subtotal) }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -64,17 +64,20 @@
 </div>
     <div style="margin-top:12px; max-width:260px; margin-left:auto;">
       <div style="display:flex; justify-content:space-between; color:var(--text-muted);">
-        <span>Subtotal</span><span>${{ "%.2f"|format(order.subtotal) }}</span>
+        <span>Subtotal</span><span>{{ order.currency_symbol }}{{ "%.2f"|format(order.subtotal) }}</span>
       </div>
+      {# Peso-priced orders (Combo Box) are HST-exempt -- no tax row at all. #}
+      {% if order.has_tax %}
       <div style="display:flex; justify-content:space-between; color:var(--text-muted); margin-top:4px;">
-        <span>HST (13%)</span><span>${{ "%.2f"|format(order.tax_amount or 0) }}</span>
+        <span>HST (13%)</span><span>{{ order.currency_symbol }}{{ "%.2f"|format(order.tax_amount) }}</span>
       </div>
+      {% endif %}
       <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1.1rem; color:var(--primary-dark); margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
-        <span>Total</span><span>${{ "%.2f"|format(order.total) }} CAD</span>
+        <span>Total</span><span>{{ order.currency_symbol }}{{ "%.2f"|format(order.total) }} {{ order.currency }}</span>
       </div>
     </div>
     <div class="note-box" style="margin-top:16px;">
-      💵 Waiting on an Interac e-Transfer for ${{ "%.2f"|format(order.total) }}
+      💵 Waiting on an Interac e-Transfer for {{ order.currency_symbol }}{{ "%.2f"|format(order.total) }} {{ order.currency }}
       to {{ company.contact_email }}, referencing order {{ order.order_number }}.
     </div>
   </div>

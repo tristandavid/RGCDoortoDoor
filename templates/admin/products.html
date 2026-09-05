@@ -29,7 +29,7 @@
       <tr>
         <td>{{ product.name }}</td>
         <td>{{ product.category_label }}</td>
-        <td>{% if product.price is not none %}${{ "%.2f"|format(product.price) }}{% else %}Contact for pricing{% endif %}</td>
+        <td>{% if product.price is not none %}{{ product.currency_symbol }}{{ "%.2f"|format(product.price) }} <span style="color:var(--text-muted); font-size:0.8rem;">{{ product.currency_code }}</span>{% else %}Contact for pricing{% endif %}</td>
         <td>
           {% if product.is_available %}
             <span class="badge badge-published">Available</span>

@@ -527,10 +527,12 @@ def send_order_status_email(order):
         order.status,
         f"Your order {order.order_number} status has been updated to: {order.status}."
     )
+    cur = order.currency_symbol
     item_lines = "\n".join(
-        f"  {item.quantity} x {item.product_name} — ${item.subtotal:.2f}"
+        f"  {item.quantity} x {item.product_name} — {cur}{item.subtotal:.2f}"
         for item in order.items
     )
+    tax_line = f"  HST (13%): {cur}{order.tax_amount:.2f}\n" if order.has_tax else ""
     return _send_email(
         to_email=order.customer_email,
         subject=f"Order Update — {order.status} | {order.order_number}",
@@ -538,9 +540,9 @@ def send_order_status_email(order):
             f"Hi {order.customer_name},\n\n"
             f"{detail}\n\n"
             f"Order summary:\n{item_lines}\n\n"
-            f"  Subtotal: ${order.subtotal:.2f}\n"
-            f"  HST (13%): ${(order.tax_amount or Decimal('0.00')):.2f}\n"
-            f"  Total: ${order.total:.2f} CAD\n\n"
+            f"  Subtotal: {cur}{order.subtotal:.2f}\n"
+            f"{tax_line}"
+            f"  Total: {cur}{order.total:.2f} {order.currency}\n\n"
             f"Questions? Reply to this email or reach us at {CONTACT_RECIPIENT_EMAIL}.\n\n"
             f"{COMPANY['name']}"
         ),
@@ -818,14 +820,28 @@ def _format_invoice_quantity(quantity):
     return str(quantity)
 
 
+def format_invoice_amount(amount, currency_code="CAD"):
+    """Money as it should appear on an invoice PDF.
+
+    ReportLab's built-in Helvetica has no ₱ glyph — it prints as a black box
+    — so a peso amount is prefixed with its ISO code ("PHP 2500.00") instead
+    of the symbol used everywhere on the web pages.
+    """
+    if currency_code == "CAD":
+        return f"${amount:.2f}"
+    return f"{currency_code} {amount:.2f}"
+
+
 def render_invoice_pdf(invoice_number, issue_date, bill_to_lines, items, subtotal,
-                        tax_label, tax_amount, total, notes=None):
+                        tax_label, tax_amount, total, notes=None, currency_code="CAD"):
     """Build a one-page invoice PDF and return it as a BytesIO buffer.
 
     `items` is a list of (description, quantity, unit_price, line_total)
-    tuples, already formatted as display strings. `tax_label`/`tax_amount`
-    may both be None to omit the tax line entirely (some manual invoices are
-    for non-taxable work).
+    tuples, already formatted as display strings — format the amounts in them
+    with format_invoice_amount() and the same `currency_code` passed here.
+    `tax_label`/`tax_amount` may both be None to omit the tax line entirely
+    (manual invoices for non-taxable work, and Combo Box orders, which are
+    priced in pesos and HST-exempt).
     """
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -900,10 +916,15 @@ def render_invoice_pdf(invoice_number, issue_date, bill_to_lines, items, subtota
     elements.append(items_table)
     elements.append(Spacer(1, 14))
 
-    totals_rows = [["Subtotal", f"${subtotal:.2f}"]]
+    totals_rows = [["Subtotal", format_invoice_amount(subtotal, currency_code)]]
     if tax_label and tax_amount is not None:
-        totals_rows.append([tax_label, f"${tax_amount:.2f}"])
-    totals_rows.append(["Total", f"${total:.2f} CAD"])
+        totals_rows.append([tax_label, format_invoice_amount(tax_amount, currency_code)])
+    # "$45.00 CAD" reads naturally; "PHP 2500.00 PHP" doesn't, and the code is
+    # already in the amount for anything that isn't dollars.
+    total_text = format_invoice_amount(total, currency_code)
+    if currency_code == "CAD":
+        total_text += " CAD"
+    totals_rows.append(["Total", total_text])
     totals_table = Table(totals_rows, colWidths=[5.0 * inch, 1.4 * inch])
     totals_table.setStyle(TableStyle([
         ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
@@ -938,8 +959,14 @@ def _order_invoice_pdf_response(order):
     if order.shipping_address:
         bill_to.extend(line for line in order.shipping_address.splitlines() if line.strip())
 
+    currency = order.currency
     items = [
-        [item.product_name, str(item.quantity), f"${item.unit_price:.2f}", f"${item.subtotal:.2f}"]
+        [
+            item.product_name,
+            str(item.quantity),
+            format_invoice_amount(item.unit_price, currency),
+            format_invoice_amount(item.subtotal, currency),
+        ]
         for item in order.items
     ]
     buffer = render_invoice_pdf(
@@ -948,9 +975,12 @@ def _order_invoice_pdf_response(order):
         bill_to_lines=bill_to,
         items=items,
         subtotal=order.subtotal,
-        tax_label="HST (13%)",
-        tax_amount=(order.tax_amount if order.tax_amount is not None else Decimal("0.00")),
+        # A peso-priced order (Combo Box) is HST-exempt, so it gets no tax
+        # line at all rather than an "HST (13%) $0.00" one.
+        tax_label=("HST (13%)" if order.has_tax else None),
+        tax_amount=(order.tax_amount if order.has_tax else None),
         total=order.total,
+        currency_code=currency,
         notes=(
             f"Payment: Interac e-Transfer to {COMPANY['contact_email']}, "
             f"referencing order {order.order_number}."
@@ -1245,6 +1275,14 @@ class Order(db.Model):
     notes = db.Column(db.Text, nullable=True)
     total = db.Column(db.Numeric(10, 2), nullable=False)
     tax_amount = db.Column(db.Numeric(10, 2), nullable=True)
+    # Currency this order was priced and totalled in, snapshotted from the
+    # cart at checkout. Combo Box is priced in Philippine Pesos (see
+    # PESO_PRICED_CATEGORIES), so an order can be PHP rather than CAD, and
+    # nothing downstream — receipt, emails, invoice PDF, admin pages — can
+    # work that out from the Order alone once the cart is gone. Nullable so
+    # orders placed before this column existed keep working; they were all
+    # CAD, which is what `currency` falls back to.
+    currency_code = db.Column(db.String(3), nullable=True)
     status = db.Column(db.String(30), nullable=False, default=ORDER_STATUSES[0])
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
@@ -1258,6 +1296,21 @@ class Order(db.Model):
     @property
     def subtotal(self):
         return sum((item.subtotal for item in self.items), Decimal("0.00"))
+
+    @property
+    def currency(self):
+        return self.currency_code or "CAD"
+
+    @property
+    def currency_symbol(self):
+        return "₱" if self.currency == "PHP" else "$"
+
+    @property
+    def has_tax(self):
+        """Whether to show a tax line at all. Peso-priced orders are
+        HST-exempt, so theirs is zero and the line is left off the receipt
+        entirely rather than printed as a pointless $0.00."""
+        return self.tax_amount is not None and self.tax_amount > 0
 
     @property
     def status_badge_class(self):
@@ -1846,6 +1899,7 @@ with app.app_context():
     db.create_all()
     _ensure_setting_value_is_text()
     _ensure_column("order", "tax_amount", "NUMERIC(10, 2)")
+    _ensure_column("order", "currency_code", "VARCHAR(3)")
     _ensure_column("subscriber", "name", "VARCHAR(200)")
     _ensure_column("subscriber", "address", "VARCHAR(300)")
     _ensure_column("subscriber", "phone", "VARCHAR(50)")
@@ -2144,14 +2198,21 @@ def get_cart_items():
 
 
 def _send_order_emails(order):
-    lines = [f"Order {order.order_number} — ${order.total:.2f} CAD", ""]
+    # `cur` is $ or ₱ depending on the order's currency, and the HST line is
+    # skipped entirely for a peso-priced (HST-exempt) order rather than
+    # printed as 0.00 -- same rule as the receipt page and the invoice PDF.
+    cur = order.currency_symbol
+    lines = [f"Order {order.order_number} — {cur}{order.total:.2f} {order.currency}", ""]
     for item in order.items:
-        lines.append(f"  {item.quantity} x {item.product_name} @ ${item.unit_price:.2f} = ${item.subtotal:.2f}")
+        lines.append(f"  {item.quantity} x {item.product_name} @ {cur}{item.unit_price:.2f} = {cur}{item.subtotal:.2f}")
     lines += [
         "",
-        f"Subtotal: ${order.subtotal:.2f}",
-        f"HST (13%): ${(order.tax_amount or Decimal('0.00')):.2f}",
-        f"Total: ${order.total:.2f} CAD",
+        f"Subtotal: {cur}{order.subtotal:.2f}",
+    ]
+    if order.has_tax:
+        lines.append(f"HST (13%): {cur}{order.tax_amount:.2f}")
+    lines += [
+        f"Total: {cur}{order.total:.2f} {order.currency}",
         "",
         f"Customer: {order.customer_name} <{order.customer_email}>",
         f"Phone: {order.customer_phone or '(not provided)'}",
@@ -2163,20 +2224,21 @@ def _send_order_emails(order):
     ]
     _send_email(
         to_email=CONTACT_RECIPIENT_EMAIL,
-        subject=f"New order {order.order_number} — ${order.total:.2f} CAD",
+        subject=f"New order {order.order_number} — {cur}{order.total:.2f} {order.currency}",
         body="\n".join(lines),
         reply_to=order.customer_email,
     )
 
     item_lines = "\n".join(
-        f"  {item.quantity} x {item.product_name} — ${item.subtotal:.2f}" for item in order.items
+        f"  {item.quantity} x {item.product_name} — {cur}{item.subtotal:.2f}" for item in order.items
     )
+    tax_line = f"HST (13%): {cur}{order.tax_amount:.2f}\n" if order.has_tax else ""
     customer_body = (
         f"Hi {order.customer_name},\n\n"
         f"Thanks for your order! Here's what you ordered:\n\n{item_lines}\n\n"
-        f"Subtotal: ${order.subtotal:.2f}\n"
-        f"HST (13%): ${(order.tax_amount or Decimal('0.00')):.2f}\n"
-        f"Total: ${order.total:.2f} CAD\n\n"
+        f"Subtotal: {cur}{order.subtotal:.2f}\n"
+        f"{tax_line}"
+        f"Total: {cur}{order.total:.2f} {order.currency}\n\n"
         "To complete your order, please send an Interac e-Transfer for the "
         f"total above to {CONTACT_RECIPIENT_EMAIL}, and include your order "
         f"number, {order.order_number}, in the message/memo field so we can "
@@ -2662,6 +2724,22 @@ def cart_add(product_id):
         quantity = 1
     quantity = max(1, min(99, quantity))
 
+    # One order carries one total, so a cart can't mix currencies: Combo Box
+    # is priced in Philippine Pesos and everything else in CAD. Adding across
+    # that line is refused here rather than silently summing pesos into a
+    # dollar total further down (cart_currency() used to fall back to CAD for
+    # a mixed cart, which quietly mispriced it).
+    existing_items = get_cart_items()
+    if any(item["product"].is_peso_priced != product.is_peso_priced for item in existing_items):
+        flash(
+            f"{product.name} is priced in "
+            f"{'Philippine Pesos' if product.is_peso_priced else 'Canadian Dollars'}, "
+            "so it has to be ordered separately from what's already in your cart. "
+            "Please check out first, or empty your cart before adding it.",
+            "error",
+        )
+        return redirect(request.referrer or url_for("cart_view"))
+
     cart = session.get(CART_SESSION_KEY, {})
     key = str(product_id)
     cart[key] = min(99, cart.get(key, 0) + quantity)
@@ -2743,6 +2821,7 @@ def checkout():
                 notes=notes or None,
                 tax_amount=tax,
                 total=total,
+                currency_code=currency_code,
             )
             db.session.add(order)
             db.session.flush()  # get order.id before adding items
@@ -2763,7 +2842,8 @@ def checkout():
         _push_to_all_devices(
             "order",
             "New order",
-            f"Order {order.order_number} from {order.customer_name} — ${order.total:.2f} CAD.",
+            f"Order {order.order_number} from {order.customer_name} — "
+            f"{order.currency_symbol}{order.total:.2f} {order.currency}.",
         )
 
         return redirect(url_for("order_confirmation", order_number=order.order_number))
@@ -4162,6 +4242,12 @@ def _order_to_dict(order, include_items=False):
         "subtotal": str(order.subtotal),
         "tax_amount": str(order.tax_amount) if order.tax_amount is not None else None,
         "total": str(order.total),
+        # Combo Box orders are priced in Philippine Pesos, so the app can't
+        # assume dollars; has_tax is false for them (HST-exempt) and the app
+        # leaves the tax row off.
+        "currency": order.currency,
+        "currency_symbol": order.currency_symbol,
+        "has_tax": order.has_tax,
         "status": order.status,
         "item_count": len(order.items),
         "created_at": _iso(order.created_at),
@@ -4223,6 +4309,17 @@ def _mailbox_message_to_dict(message):
     }
 
 
+def _product_categories_payload():
+    """Category list for the Android app: value/label plus whether the
+    category is priced in Philippine Pesos (Combo Box), so the app can show ₱
+    and label the price field correctly without hardcoding the rule its own
+    copy of PESO_PRICED_CATEGORIES."""
+    return [
+        {"value": v, "label": l, "peso_priced": v in PESO_PRICED_CATEGORIES}
+        for v, l in PRODUCT_CATEGORIES
+    ]
+
+
 def _product_to_dict(product):
     # image_url stays for older API consumers -- it's just the first gallery
     # photo now. image_urls is the full gallery, in display order.
@@ -4238,6 +4335,10 @@ def _product_to_dict(product):
         "name": product.name,
         "description": product.description,
         "price": str(product.price) if product.price is not None else None,
+        "currency_symbol": product.currency_symbol,
+        "currency_code": product.currency_code,
+        "is_peso_priced": product.is_peso_priced,
+        "is_tax_exempt": product.is_tax_exempt,
         "image_url": image_urls[0] if image_urls else None,
         "image_urls": image_urls,
         "is_available": product.is_available,
@@ -4310,7 +4411,7 @@ def api_me():
         # screens for the owner too.
         order_statuses=ORDER_STATUSES,
         pickup_statuses=PICKUP_STATUSES,
-        product_categories=[{"value": v, "label": l} for v, l in PRODUCT_CATEGORIES],
+        product_categories=_product_categories_payload(),
         quick_replies=[{"label": l, "body": b} for l, b in QUICK_REPLIES],
     )
 
@@ -4754,7 +4855,7 @@ def api_products():
     products = query.order_by(Product.created_at.desc()).all()
     return jsonify(
         products=[_product_to_dict(p) for p in products],
-        categories=[{"value": v, "label": l} for v, l in PRODUCT_CATEGORIES],
+        categories=_product_categories_payload(),
     )
 
 
