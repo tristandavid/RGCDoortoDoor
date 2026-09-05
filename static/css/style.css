@@ -1732,3 +1732,41 @@ form.newsletter-form { gap: 6px; margin-top: 6px; }
   box-shadow: 0 12px 26px rgba(80, 125, 229, 0.45);
 }
 
+
+/* --- Admin sub-tabs (Pickups: Active / Archived) ------------------------ */
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.admin-tab {
+  padding: 9px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.admin-tab:hover { color: var(--admin-accent, #1e3a8a); }
+.admin-tab.is-active {
+  color: var(--admin-accent, #1e3a8a);
+  border-bottom-color: var(--admin-accent, #1e3a8a);
+}
+.admin-tab-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 6px;
+  margin-left: 4px;
+  border-radius: 10px;
+  background: var(--border);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+.admin-tab.is-active .admin-tab-count {
+  background: var(--admin-accent, #1e3a8a);
+  color: #fff;
+}

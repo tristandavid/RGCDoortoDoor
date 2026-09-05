@@ -6,7 +6,11 @@
 {% block admin_content %}
 
 <div style="margin-bottom:1.25rem;">
-  <a href="{{ url_for('admin_pickups') }}" class="btn btn-sm btn-outline">&larr; Back to Pickups</a>
+  {% if pickup.archived %}
+    <a href="{{ url_for('admin_pickups_archived') }}" class="btn btn-sm btn-outline">&larr; Back to Archived</a>
+  {% else %}
+    <a href="{{ url_for('admin_pickups') }}" class="btn btn-sm btn-outline">&larr; Back to Pickups</a>
+  {% endif %}
 </div>
 
 <div class="admin-card" style="max-width:640px; margin-bottom:1.5rem;">
@@ -38,6 +42,29 @@
     </select>
     <button type="submit" class="btn btn-sm btn-primary">Update</button>
   </form>
+
+  <div style="margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border);">
+    {% if pickup.archived %}
+      <p style="color:var(--text-muted); margin:0 0 .75rem; font-size:.9rem;">
+        Archived{% if pickup.archived_at %} on {{ pickup.archived_at.strftime('%b %d, %Y') }}{% endif %} &mdash;
+        hidden from the Active list, still visible to the customer.
+      </p>
+      <form method="post" action="{{ url_for('admin_pickup_unarchive', pickup_id=pickup.id) }}">
+        <button type="submit" class="btn btn-sm btn-outline">Restore to Active</button>
+      </form>
+    {% elif pickup.status in archivable_statuses %}
+      <p style="color:var(--text-muted); margin:0 0 .75rem; font-size:.9rem;">
+        Done with this one? Archiving clears it off the Active list without deleting anything.
+      </p>
+      <form method="post" action="{{ url_for('admin_pickup_archive', pickup_id=pickup.id) }}">
+        <button type="submit" class="btn btn-sm btn-outline">Archive</button>
+      </form>
+    {% else %}
+      <p style="color:var(--text-muted); margin:0; font-size:.9rem;">
+        Set the status to Picked Up or Cancelled to archive this request.
+      </p>
+    {% endif %}
+  </div>
 </div>
 
 <div class="admin-card" style="max-width:640px;">

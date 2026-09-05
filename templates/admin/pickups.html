@@ -4,9 +4,26 @@
 {% block page_subtitle %}<p>Everyone who's requested a box pickup via "Book a Pick Up"</p>{% endblock %}
 {% block admin_content %}
 
+<nav class="admin-tabs" aria-label="Pickup request views">
+  <a href="{{ url_for('admin_pickups') }}"
+     class="admin-tab {% if view == 'active' %}is-active{% endif %}"
+     {% if view == 'active' %}aria-current="page"{% endif %}>Active</a>
+  <a href="{{ url_for('admin_pickups_archived') }}"
+     class="admin-tab {% if view == 'archived' %}is-active{% endif %}"
+     {% if view == 'archived' %}aria-current="page"{% endif %}>
+    Archived{% if archived_count %} <span class="admin-tab-count">{{ archived_count }}</span>{% endif %}
+  </a>
+</nav>
+
 <div class="admin-card">
   {% if not pickups %}
-    <p style="color:var(--text-muted);">No pickup requests yet.</p>
+    <p style="color:var(--text-muted);">
+      {% if view == 'archived' %}
+        Nothing archived yet. Finish or cancel a request, then archive it to clear it off the Active list.
+      {% else %}
+        No pickup requests yet.
+      {% endif %}
+    </p>
   {% else %}
     <div class="table-scroll">
 <table class="admin-table">
@@ -19,6 +36,7 @@
           <th>Boxes</th>
           <th>Invoice</th>
           <th>Status</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -46,6 +64,18 @@
                 {% endfor %}
               </select>
             </form>
+          </td>
+          <td>
+            {% if view == 'archived' %}
+              <form method="post" action="{{ url_for('admin_pickup_unarchive', pickup_id=pickup.id) }}">
+                <button type="submit" class="btn btn-small btn-outline">Restore</button>
+              </form>
+            {% elif pickup.status in archivable_statuses %}
+              <form method="post" action="{{ url_for('admin_pickup_archive', pickup_id=pickup.id) }}"
+                    onsubmit="return confirm('Move this request to the Archived tab? Nothing is deleted \u2014 you can restore it any time.')">
+                <button type="submit" class="btn btn-small btn-outline">Archive</button>
+              </form>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}

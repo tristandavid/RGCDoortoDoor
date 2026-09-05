@@ -1377,6 +1377,12 @@ class PickupRequest(db.Model):
     # as product photos and the site favicon. Shown to the customer on their
     # My Account > My Pickup Requests tab once set.
     invoice_filename = db.Column(db.String(300), nullable=True)
+    # Owner-only archive flag, set from /admin/pickups or the Android app once
+    # a request is finished or called off. Archived rows drop out of the
+    # working list and live under the Archived tab instead - nothing is
+    # deleted, and the customer's My Pickup Requests tab is unaffected.
+    archived = db.Column(db.Boolean, nullable=False, default=False)
+    archived_at = db.Column(db.DateTime, nullable=True)
 
     @property
     def status_badge_class(self):
@@ -3306,12 +3312,77 @@ def admin_invoice_delete(invoice_id):
     return redirect(url_for("admin_invoices"))
 
 
+# Only finished or called-off requests can be archived - archiving something
+# still in progress would hide work the owner hasn't done yet.
+ARCHIVABLE_PICKUP_STATUSES = ("Picked Up", "Cancelled")
+
+
 @app.route("/admin/pickups")
 @login_required
 @owner_required
 def admin_pickups():
-    pickups = PickupRequest.query.order_by(PickupRequest.pickup_date.asc()).all()
-    return render_template("admin/pickups.html", pickups=pickups, statuses=PICKUP_STATUSES)
+    pickups = (
+        PickupRequest.query
+        .filter_by(archived=False)
+        .order_by(PickupRequest.pickup_date.asc())
+        .all()
+    )
+    archived_count = PickupRequest.query.filter_by(archived=True).count()
+    return render_template(
+        "admin/pickups.html",
+        pickups=pickups,
+        statuses=PICKUP_STATUSES,
+        view="active",
+        archived_count=archived_count,
+        archivable_statuses=ARCHIVABLE_PICKUP_STATUSES,
+    )
+
+
+@app.route("/admin/pickups/archived")
+@login_required
+@owner_required
+def admin_pickups_archived():
+    pickups = (
+        PickupRequest.query
+        .filter_by(archived=True)
+        .order_by(PickupRequest.archived_at.desc())
+        .all()
+    )
+    return render_template(
+        "admin/pickups.html",
+        pickups=pickups,
+        statuses=PICKUP_STATUSES,
+        view="archived",
+        archived_count=len(pickups),
+        archivable_statuses=ARCHIVABLE_PICKUP_STATUSES,
+    )
+
+
+@app.route("/admin/pickups/<int:pickup_id>/archive", methods=["POST"])
+@login_required
+@owner_required
+def admin_pickup_archive(pickup_id):
+    pickup = PickupRequest.query.get_or_404(pickup_id)
+    if pickup.status not in ARCHIVABLE_PICKUP_STATUSES:
+        flash("Only Picked Up or Cancelled requests can be archived.", "error")
+    else:
+        pickup.archived = True
+        pickup.archived_at = datetime.utcnow()
+        db.session.commit()
+        flash("Pickup request archived.", "success")
+    return redirect(url_for("admin_pickups"))
+
+
+@app.route("/admin/pickups/<int:pickup_id>/unarchive", methods=["POST"])
+@login_required
+@owner_required
+def admin_pickup_unarchive(pickup_id):
+    pickup = PickupRequest.query.get_or_404(pickup_id)
+    pickup.archived = False
+    pickup.archived_at = None
+    db.session.commit()
+    flash("Pickup request restored.", "success")
+    return redirect(url_for("admin_pickups_archived"))
 
 
 @app.route("/admin/pickups/<int:pickup_id>/status", methods=["POST"])
@@ -3335,7 +3406,12 @@ def admin_pickup_update_status(pickup_id):
 @owner_required
 def admin_pickup_detail(pickup_id):
     pickup = PickupRequest.query.get_or_404(pickup_id)
-    return render_template("admin/pickup_detail.html", pickup=pickup, statuses=PICKUP_STATUSES)
+    return render_template(
+        "admin/pickup_detail.html",
+        pickup=pickup,
+        statuses=PICKUP_STATUSES,
+        archivable_statuses=ARCHIVABLE_PICKUP_STATUSES,
+    )
 
 
 @app.route("/admin/pickups/<int:pickup_id>/invoice", methods=["POST"])
@@ -4128,6 +4204,8 @@ def _pickup_to_dict(pickup):
         "notes": pickup.notes,
         "status": pickup.status,
         "created_at": _iso(pickup.created_at),
+        "archived": pickup.archived,
+        "archived_at": _iso(pickup.archived_at),
     }
 
 
@@ -4478,6 +4556,14 @@ def api_pickups():
         if status not in PICKUP_STATUSES:
             return jsonify(error="Invalid status filter."), 400
         query = query.filter_by(status=status)
+    # Default to the working list; ?archived=1 returns the Archived tab.
+    archived = request.args.get("archived", "").strip().lower()
+    if archived in ("1", "true", "yes"):
+        query = query.filter_by(archived=True)
+    elif archived in ("", "0", "false", "no"):
+        query = query.filter_by(archived=False)
+    else:
+        return jsonify(error="Invalid archived filter."), 400
     pickups = query.order_by(PickupRequest.pickup_date.asc()).all()
     return jsonify(
         pickups=[_pickup_to_dict(p) for p in pickups],
@@ -4505,6 +4591,26 @@ def api_pickup_update_status(pickup_id):
     pickup.status = status
     db.session.commit()
     send_pickup_status_email(pickup)
+    return jsonify(pickup=_pickup_to_dict(pickup))
+
+
+@app.route("/api/v1/pickups/<int:pickup_id>/archive", methods=["POST"])
+@api_login_required
+@api_owner_required
+def api_pickup_archive(pickup_id):
+    """Archive or restore a pickup request. Body: {"archived": true|false}.
+    Mirrors the web admin's Archived tab - nothing is deleted, the row just
+    moves between the two lists."""
+    pickup = PickupRequest.query.get_or_404(pickup_id)
+    data = request.get_json(silent=True) or {}
+    archived = bool(data.get("archived", True))
+    if archived and pickup.status not in ARCHIVABLE_PICKUP_STATUSES:
+        return jsonify(
+            error="Only Picked Up or Cancelled requests can be archived.",
+        ), 400
+    pickup.archived = archived
+    pickup.archived_at = datetime.utcnow() if archived else None
+    db.session.commit()
     return jsonify(pickup=_pickup_to_dict(pickup))
 
 
