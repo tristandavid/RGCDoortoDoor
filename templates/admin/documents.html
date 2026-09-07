@@ -1,0 +1,64 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Documents | {{ company.name }}{% endblock %}
+{% block page_title %}Documents{% endblock %}
+{% block page_subtitle %}<p>Upload and organize Word, Excel, and PDF files</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <div class="admin-actions" style="margin-bottom:18px; flex-wrap:wrap; gap:10px;">
+    <a href="{{ url_for('admin_document_new') }}" class="btn btn-primary">+ Upload Document</a>
+    <a href="{{ url_for('admin_documents') }}" class="btn btn-small {{ 'btn-primary' if not active_category else 'btn-outline' }}" style="{{ '' if not active_category else 'color:var(--primary); border-color:var(--primary);' }}">All</a>
+    {% for value in categories %}
+      <a href="{{ url_for('admin_documents', category=value) }}" class="btn btn-small {{ 'btn-primary' if active_category == value else 'btn-outline' }}" style="{{ '' if active_category == value else 'color:var(--primary); border-color:var(--primary);' }}">{{ value }}</a>
+    {% endfor %}
+  </div>
+
+  <form method="get" style="margin-bottom:18px; display:flex; gap:10px; max-width:360px;">
+    {% if active_category %}<input type="hidden" name="category" value="{{ active_category }}">{% endif %}
+    <input type="text" name="q" value="{{ search }}" placeholder="Search by title or file name…" style="flex:1;">
+    <button type="submit" class="btn btn-small btn-outline" style="color:var(--primary); border-color:var(--primary);">Search</button>
+  </form>
+
+  <div class="table-scroll">
+<table class="admin-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Category</th>
+        <th>Type</th>
+        <th>Size</th>
+        <th>Uploaded</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for document in documents %}
+      <tr>
+        <td>
+          {{ document.title }}
+          <div style="color:var(--text-muted); font-size:0.8rem;">{{ document.original_filename }}</div>
+        </td>
+        <td>{{ document.category or '—' }}</td>
+        <td><span class="badge badge-status">{{ document.extension|upper }}</span></td>
+        <td>{{ document.file_size_display }}</td>
+        <td>{{ document.created_at.strftime('%b %d, %Y') }}</td>
+        <td>
+          <div class="admin-actions">
+            <a href="{{ url_for('admin_document_preview', document_id=document.id) }}" class="btn btn-small">Preview</a>
+            <a href="{{ document.download_url }}" class="btn btn-small" download="{{ document.original_filename }}">Download</a>
+            <a href="{{ url_for('admin_document_edit', document_id=document.id) }}" class="btn btn-small btn-primary">Edit</a>
+            <form method="post" action="{{ url_for('admin_document_delete', document_id=document.id) }}" onsubmit="return confirm('Delete this document? This cannot be undone.');" style="display:inline;">
+              <button type="submit" class="btn btn-small btn-danger">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">No documents yet. Upload your first one above.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+
+{% endblock %}

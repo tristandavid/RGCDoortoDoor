@@ -72,7 +72,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
     "pool_recycle": 280,
 }
-app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB uploads
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB uploads (Word/Excel/PDF docs can run bigger than photos)
 
 # Keeps the admin logged in across visits — the browser holds a signed
 # session cookie for 30 days instead of just until it's closed, so the
@@ -1077,6 +1077,8 @@ ADMIN_SECTIONS = [
     ("🛍️", "Products", "admin_products",
      {"admin_products", "admin_product_new", "admin_product_edit"}),
     ("📄", "Pages", "admin_pages", {"admin_pages", "admin_page_edit"}),
+    ("📁", "Documents", "admin_documents",
+     {"admin_documents", "admin_document_new", "admin_document_edit", "admin_document_preview"}),
     ("⚙️", "Settings", "admin_settings",
      {"admin_settings", "admin_settings_mfa_setup"}),
 ]
@@ -1505,6 +1507,53 @@ class PageContent(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
+
+class Document(db.Model):
+    """Word/Excel/PDF reference documents admins upload and keep organized
+    from Admin > Documents. Stored on local disk the same way as post/product
+    photos and pickup invoices -- see save_uploaded_image(). There's no
+    in-browser editing of the file's actual content (that would need a
+    self-hosted OnlyOffice/Collabora server); admins preview it here (PDFs
+    render natively, Word/Excel get a read-only client-side preview) and
+    "edit" by uploading a replacement file, which keeps this same row/URL
+    but swaps the file on disk -- see admin_document_edit()."""
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    # Free-text, not a fixed enum like Product.category -- admins organize
+    # documents however makes sense to them (e.g. "Contracts", "Policies").
+    # The admin_documents() list page offers whatever values already exist
+    # as quick filter tabs, and document_form.html suggests them via a
+    # <datalist> so similar documents naturally end up under the same label.
+    category = db.Column(db.String(100), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    # Stored path relative to static/, e.g. "documents/<uuid>.docx" -- see
+    # save_uploaded_image(). original_filename is what the admin uploaded,
+    # used for display and as the suggested name on download.
+    filename = db.Column(db.String(300), nullable=False)
+    original_filename = db.Column(db.String(300), nullable=False)
+    file_size = db.Column(db.Integer, nullable=True)
+    uploaded_by = db.Column(db.String(50), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    @property
+    def extension(self):
+        return self.filename.rsplit(".", 1)[1].lower() if "." in self.filename else ""
+
+    @property
+    def download_url(self):
+        return url_for("static", filename=self.filename)
+
+    @property
+    def file_size_display(self):
+        size = self.file_size or 0
+        if size < 1024:
+            return f"{size} B"
+        if size < 1024 * 1024:
+            return f"{size / 1024:.0f} KB"
+        return f"{size / (1024 * 1024):.1f} MB"
 
 
 class FcmToken(db.Model):
@@ -1942,6 +1991,7 @@ with app.app_context():
 
 FAVICON_EXTENSIONS = {"ico", "png", "jpg", "jpeg", "svg"}
 INVOICE_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
+DOCUMENT_EXTENSIONS = {"pdf", "doc", "docx", "xls", "xlsx"}
 
 
 def _has_allowed_extension(filename, allowed_extensions):
@@ -3589,6 +3639,125 @@ def admin_page_edit(slug):
     return render_template("admin/page_form.html", page=page)
 
 
+# ---------------------------------------------------------------------------
+# Documents — Word/Excel/PDF files admins upload and keep organized. See the
+# Document model above for the storage/edit model: there's no in-browser
+# editing of a file's actual content, only its title/category/description
+# plus swapping in a replacement file (admin_document_edit).
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/documents")
+@login_required
+def admin_documents():
+    category = request.args.get("category", "").strip()
+    search = request.args.get("q", "").strip()
+    # Quick-filter tabs are built from whatever categories already exist,
+    # rather than a fixed list like Product's — see the Document model's
+    # note on why category is free text.
+    existing_categories = [
+        row[0] for row in
+        db.session.query(Document.category).filter(Document.category.isnot(None))
+        .filter(Document.category != "").distinct().order_by(Document.category).all()
+    ]
+    query = Document.query
+    if category:
+        query = query.filter_by(category=category)
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            db.or_(Document.title.ilike(like), Document.original_filename.ilike(like))
+        )
+    documents = query.order_by(Document.created_at.desc()).all()
+    return render_template(
+        "admin/documents.html", documents=documents, categories=existing_categories,
+        active_category=category, search=search,
+    )
+
+
+@app.route("/admin/documents/new", methods=["GET", "POST"])
+@login_required
+def admin_document_new():
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        category = request.form.get("category", "").strip() or None
+        description = request.form.get("description", "").strip() or None
+        uploaded = request.files.get("file")
+        if not title:
+            flash("Title is required.", "error")
+            return render_template("admin/document_form.html", document=None)
+        if not uploaded or not uploaded.filename:
+            flash("Please choose a file to upload.", "error")
+            return render_template("admin/document_form.html", document=None)
+        filename = save_uploaded_image(uploaded, prefix="documents", allowed_extensions=DOCUMENT_EXTENSIONS)
+        if not filename:
+            # save_uploaded_image already flashed why (bad extension, or a
+            # disk error).
+            return render_template("admin/document_form.html", document=None)
+        file_path = os.path.join(app.static_folder, filename)
+        document = Document(
+            title=title, category=category, description=description,
+            filename=filename, original_filename=uploaded.filename,
+            file_size=os.path.getsize(file_path) if os.path.isfile(file_path) else None,
+            uploaded_by=session.get("admin_identity", "owner"),
+        )
+        db.session.add(document)
+        db.session.commit()
+        flash("Document uploaded.", "success")
+        return redirect(url_for("admin_documents"))
+    return render_template("admin/document_form.html", document=None)
+
+
+@app.route("/admin/documents/<int:document_id>/edit", methods=["GET", "POST"])
+@login_required
+def admin_document_edit(document_id):
+    document = Document.query.get_or_404(document_id)
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        category = request.form.get("category", "").strip() or None
+        description = request.form.get("description", "").strip() or None
+        if not title:
+            flash("Title is required.", "error")
+            return render_template("admin/document_form.html", document=document)
+        uploaded = request.files.get("file")
+        if uploaded and uploaded.filename:
+            new_filename = save_uploaded_image(
+                uploaded, prefix="documents", allowed_extensions=DOCUMENT_EXTENSIONS,
+            )
+            if not new_filename:
+                return render_template("admin/document_form.html", document=document)
+            old_filename = document.filename
+            document.filename = new_filename
+            document.original_filename = uploaded.filename
+            file_path = os.path.join(app.static_folder, new_filename)
+            document.file_size = os.path.getsize(file_path) if os.path.isfile(file_path) else None
+            delete_uploaded_image(old_filename)
+        document.title = title
+        document.category = category
+        document.description = description
+        db.session.commit()
+        flash("Document updated.", "success")
+        return redirect(url_for("admin_documents"))
+    return render_template("admin/document_form.html", document=document)
+
+
+@app.route("/admin/documents/<int:document_id>/delete", methods=["POST"])
+@login_required
+def admin_document_delete(document_id):
+    document = Document.query.get_or_404(document_id)
+    delete_uploaded_image(document.filename)
+    db.session.delete(document)
+    db.session.commit()
+    flash("Document deleted.", "success")
+    return redirect(url_for("admin_documents"))
+
+
+@app.route("/admin/documents/<int:document_id>/preview")
+@login_required
+def admin_document_preview(document_id):
+    document = Document.query.get_or_404(document_id)
+    return render_template("admin/document_preview.html", document=document)
+
+
 @app.route("/admin/products")
 @login_required
 def admin_products():
@@ -3922,8 +4091,9 @@ def admin_settings_mfa_disable():
 # Two independent backup types:
 #   - Database backup: a JSON export of every table row — portable across
 #     Postgres and SQLite, and safe to import on a fresh install.
-#   - Files backup: a ZIP of static/uploads/, static/branding/, and static/invoices/ —
-#     product images, the favicon, and any admin-uploaded pickup invoices.
+#   - Files backup: a ZIP of static/uploads/, static/branding/, static/invoices/,
+#     and static/documents/ — product images, the favicon, admin-uploaded
+#     pickup invoices, and files uploaded under Admin > Documents.
 #
 # Restore works the same way in reverse: upload the file that was downloaded,
 # and the server applies it. Database restore is additive for Settings (merges
@@ -4130,10 +4300,10 @@ def admin_backup_database():
 @app.route("/admin/settings/backup/files")
 @login_required
 def admin_backup_files():
-    """Download a ZIP of all uploaded static files (uploads, branding, invoices)."""
+    """Download a ZIP of all uploaded static files (uploads, branding, invoices, documents)."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for subfolder in ("uploads", "branding", "invoices"):
+        for subfolder in ("uploads", "branding", "invoices", "documents"):
             folder_path = os.path.join(app.static_folder, subfolder)
             if not os.path.isdir(folder_path):
                 continue

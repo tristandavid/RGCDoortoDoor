@@ -1,0 +1,47 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}{{ 'Edit Document' if document else 'Upload Document' }} | {{ company.name }}{% endblock %}
+{% block page_title %}{{ 'Edit Document' if document else 'Upload Document' }}{% endblock %}
+{% block page_subtitle %}<p>Word (.doc/.docx), Excel (.xls/.xlsx), and PDF files</p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <form class="admin-form" method="post" enctype="multipart/form-data">
+    <div>
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" value="{{ document.title if document else '' }}" placeholder="e.g. Independent Contractor Agreement" required>
+    </div>
+    <div>
+      <label for="category">Category (optional)</label>
+      <input type="text" id="category" name="category" list="category-options" value="{{ document.category if document and document.category else '' }}" placeholder="e.g. Contracts">
+      <datalist id="category-options">
+        {% for value in categories %}<option value="{{ value }}">{% endfor %}
+      </datalist>
+    </div>
+    <div>
+      <label for="description">Description (optional)</label>
+      <textarea id="description" name="description" placeholder="Notes about what this document is or when to use it">{{ document.description if document and document.description else '' }}</textarea>
+    </div>
+    <div>
+      <label for="file">{{ 'Replace file (optional)' if document else 'File' }}</label>
+      {% if document %}
+        <p style="color:var(--text-muted); font-size:0.85rem; margin:0 0 10px;">
+          Current file: {{ document.original_filename }} ({{ document.file_size_display }}).
+          Choose a new file only if you want to replace it — the title,
+          category, and description above stay editable either way.
+        </p>
+      {% endif %}
+      <input type="file" id="file" name="file" accept=".pdf,.doc,.docx,.xls,.xlsx" {{ '' if document else 'required' }}>
+      <p style="color:var(--text-muted); font-size:0.8rem; margin:6px 0 0;">
+        Documents aren't edited in the browser — to change what's inside a
+        file, edit it in Word/Excel on your computer, then upload the new
+        version here. It replaces the old one under the same title.
+      </p>
+    </div>
+    <div>
+      <button type="submit" class="btn btn-primary">{{ 'Save Changes' if document else 'Upload Document' }}</button>
+      <a href="{{ url_for('admin_documents') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary); margin-left:10px;">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

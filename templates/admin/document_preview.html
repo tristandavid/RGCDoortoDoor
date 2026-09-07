@@ -1,0 +1,94 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}{{ document.title }} | {{ company.name }}{% endblock %}
+{% block page_title %}{{ document.title }}{% endblock %}
+{% block page_subtitle %}<p>{{ document.original_filename }} &middot; {{ document.file_size_display }} &middot; read-only preview — <a href="{{ url_for('admin_document_edit', document_id=document.id) }}">edit details or replace the file</a></p>{% endblock %}
+{% block admin_content %}
+
+<div class="admin-card">
+  <div class="admin-actions" style="margin-bottom:16px;">
+    <a href="{{ document.download_url }}" class="btn btn-primary" download="{{ document.original_filename }}">Download</a>
+    <a href="{{ url_for('admin_documents') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary);">Back to Documents</a>
+  </div>
+
+  {% set ext = document.extension %}
+  {% if ext == 'pdf' %}
+    <iframe src="{{ document.download_url }}" style="width:100%; height:80vh; border:1px solid var(--border); border-radius:8px;" title="{{ document.title }}"></iframe>
+
+  {% elif ext == 'docx' %}
+    <div id="doc-preview" style="border:1px solid var(--border); border-radius:8px; padding:20px; min-height:200px; background:#fff; overflow:auto; max-height:80vh;">
+      <p style="color:var(--text-muted);">Loading preview…</p>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.5/dist/docx-preview.min.js"></script>
+    <script>
+      (function () {
+        var target = document.getElementById("doc-preview");
+        fetch("{{ document.download_url }}")
+          .then(function (res) { return res.blob(); })
+          .then(function (blob) {
+            target.innerHTML = "";
+            return window.docx.renderAsync(blob, target);
+          })
+          .catch(function () {
+            target.innerHTML = "<p style='color:var(--text-muted);'>Couldn't render a preview of this file. Use Download to open it in Word.</p>";
+          });
+      })();
+    </script>
+
+  {% elif ext in ('xlsx', 'xls') %}
+    <div id="doc-preview" style="border:1px solid var(--border); border-radius:8px; padding:0; overflow:auto; max-height:80vh;">
+      <p style="color:var(--text-muted); padding:20px;">Loading preview…</p>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+      (function () {
+        var target = document.getElementById("doc-preview");
+        fetch("{{ document.download_url }}")
+          .then(function (res) { return res.arrayBuffer(); })
+          .then(function (buf) {
+            var workbook = XLSX.read(buf, { type: "array" });
+            target.innerHTML = "";
+            var tabs = document.createElement("div");
+            tabs.style.cssText = "display:flex; gap:6px; padding:10px 10px 0; flex-wrap:wrap;";
+            var panes = document.createElement("div");
+            panes.style.padding = "0 10px 10px";
+            workbook.SheetNames.forEach(function (name, i) {
+              var btn = document.createElement("button");
+              btn.type = "button";
+              btn.textContent = name;
+              btn.className = "btn btn-small" + (i === 0 ? " btn-primary" : " btn-outline");
+              btn.style.cssText = i === 0 ? "" : "color:var(--primary); border-color:var(--primary);";
+              var pane = document.createElement("div");
+              pane.className = "admin-table-wrap";
+              pane.innerHTML = XLSX.utils.sheet_to_html(workbook.Sheets[name], { id: "sheet-" + i });
+              pane.style.display = i === 0 ? "block" : "none";
+              pane.querySelectorAll("table").forEach(function (t) { t.className = "admin-table"; });
+              btn.addEventListener("click", function () {
+                panes.querySelectorAll(":scope > div").forEach(function (p) { p.style.display = "none"; });
+                tabs.querySelectorAll("button").forEach(function (b) {
+                  b.className = "btn btn-small btn-outline";
+                  b.style.cssText = "color:var(--primary); border-color:var(--primary);";
+                });
+                pane.style.display = "block";
+                btn.className = "btn btn-small btn-primary";
+                btn.style.cssText = "";
+              });
+              tabs.appendChild(btn);
+              panes.appendChild(pane);
+            });
+            if (workbook.SheetNames.length > 1) target.appendChild(tabs);
+            target.appendChild(panes);
+          })
+          .catch(function () {
+            target.innerHTML = "<p style='color:var(--text-muted); padding:20px;'>Couldn't render a preview of this file. Use Download to open it in Excel.</p>";
+          });
+      })();
+    </script>
+
+  {% else %}
+    <p style="color:var(--text-muted);">
+      Preview isn't available for .{{ ext }} files — use Download above to open it locally.
+    </p>
+  {% endif %}
+</div>
+
+{% endblock %}
