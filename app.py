@@ -2010,6 +2010,11 @@ with app.app_context():
     _ensure_column("customer_user", "google_id", "VARCHAR(64)")
     _ensure_column("customer_user", "needs_profile_details", "BOOLEAN DEFAULT FALSE")
     _ensure_column("pickup_request", "invoice_filename", "VARCHAR(300)")
+    # edit_version was added to Document after some installs had already
+    # created the table via db.create_all() (which only creates NEW tables,
+    # never adds columns to ones that already exist) -- see the Document
+    # model's comment on this column.
+    _ensure_column("document", "edit_version", "INTEGER DEFAULT 1")
     # fcm_token table: created by db.create_all() above on first run.
     # No _ensure_column needed — it's a new table with no legacy columns.
     # The "staff"/"admin" CustomerUser roles have been removed — every
