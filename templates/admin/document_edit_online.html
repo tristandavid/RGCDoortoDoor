@@ -1,10 +1,10 @@
 {% extends "admin/_admin_base.html" %}
 {% block title %}Editing: {{ document.title }} | {{ company.name }}{% endblock %}
 {% block page_title %}{{ document.title }}{% endblock %}
-{% block page_subtitle %}<p>Editing online in Word/Excel-compatible view — changes save back to this document automatically. <a href="{{ url_for('admin_document_preview', document_id=document.id) }}">Back to preview</a></p>{% endblock %}
+{% block page_subtitle %}<p style="margin-bottom:4px;">Changes save back to this document automatically. <a href="{{ url_for('admin_document_preview', document_id=document.id) }}">Back to preview</a></p>{% endblock %}
 {% block admin_content %}
 
-<div id="onlyoffice-placeholder" style="width:100%; height:82vh; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:#fff;"></div>
+<div id="onlyoffice-placeholder" style="width:100%; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:#fff;"></div>
 <p id="onlyoffice-error" style="display:none; color:var(--text-muted); margin-top:12px;">
   Couldn't load the online editor from {{ onlyoffice_url }}. Make sure the
   OnlyOffice Document Server is running and reachable, then reload this
@@ -14,11 +14,29 @@
 <script src="{{ onlyoffice_url }}/web-apps/apps/api/documents/api.js" onerror="document.getElementById('onlyoffice-error').style.display='block';"></script>
 <script>
   (function () {
+    var placeholder = document.getElementById("onlyoffice-placeholder");
+
+    // Fixed vh/px heights leave a huge dead-space gap under the editor on
+    // most screens, which is what made it look "small" -- this instead
+    // sizes it to fill whatever's left of the browser window below the
+    // page header, right down near the bottom edge, and re-fits on resize
+    // so it stays that way if the window changes size.
+    function sizePlaceholder() {
+      var top = placeholder.getBoundingClientRect().top;
+      var height = window.innerHeight - top - 24;
+      placeholder.style.height = Math.max(height, 500) + "px";
+    }
+    sizePlaceholder();
+    window.addEventListener("resize", sizePlaceholder);
+
     if (typeof DocsAPI === "undefined") {
       document.getElementById("onlyoffice-error").style.display = "block";
       return;
     }
     var config = {{ config|tojson }};
+    config.type = "desktop";
+    config.width = "100%";
+    config.height = "100%";
     new DocsAPI.DocEditor("onlyoffice-placeholder", config);
   })();
 </script>
