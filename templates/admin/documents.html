@@ -45,8 +45,11 @@
         <td>
           <div class="admin-actions">
             <a href="{{ url_for('admin_document_preview', document_id=document.id) }}" class="btn btn-small">Preview</a>
+            {% if onlyoffice_enabled and document.onlyoffice_document_type %}
+              <a href="{{ url_for('admin_document_edit_online', document_id=document.id) }}" class="btn btn-small btn-primary">Edit Online</a>
+            {% endif %}
             <a href="{{ document.download_url }}" class="btn btn-small" download="{{ document.original_filename }}">Download</a>
-            <a href="{{ url_for('admin_document_edit', document_id=document.id) }}" class="btn btn-small btn-primary">Edit</a>
+            <a href="{{ url_for('admin_document_edit', document_id=document.id) }}" class="btn btn-small">Edit Details</a>
             <form method="post" action="{{ url_for('admin_document_delete', document_id=document.id) }}" onsubmit="return confirm('Delete this document? This cannot be undone.');" style="display:inline;">
               <button type="submit" class="btn btn-small btn-danger">Delete</button>
             </form>

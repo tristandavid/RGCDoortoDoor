@@ -1,0 +1,26 @@
+{% extends "admin/_admin_base.html" %}
+{% block title %}Editing: {{ document.title }} | {{ company.name }}{% endblock %}
+{% block page_title %}{{ document.title }}{% endblock %}
+{% block page_subtitle %}<p>Editing online in Word/Excel-compatible view — changes save back to this document automatically. <a href="{{ url_for('admin_document_preview', document_id=document.id) }}">Back to preview</a></p>{% endblock %}
+{% block admin_content %}
+
+<div id="onlyoffice-placeholder" style="width:100%; height:82vh; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:#fff;"></div>
+<p id="onlyoffice-error" style="display:none; color:var(--text-muted); margin-top:12px;">
+  Couldn't load the online editor from {{ onlyoffice_url }}. Make sure the
+  OnlyOffice Document Server is running and reachable, then reload this
+  page — see deploy/onlyoffice.md.
+</p>
+
+<script src="{{ onlyoffice_url }}/web-apps/apps/api/documents/api.js" onerror="document.getElementById('onlyoffice-error').style.display='block';"></script>
+<script>
+  (function () {
+    if (typeof DocsAPI === "undefined") {
+      document.getElementById("onlyoffice-error").style.display = "block";
+      return;
+    }
+    var config = {{ config|tojson }};
+    new DocsAPI.DocEditor("onlyoffice-placeholder", config);
+  })();
+</script>
+
+{% endblock %}

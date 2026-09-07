@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Nightly backup: dumps Postgres and archives uploaded images, keeps the
-# last KEEP_DAYS locally. Self-hosting means you no longer get Supabase's
+# Nightly backup: dumps Postgres and archives uploaded images and documents,
+# keeps the last KEEP_DAYS locally. Self-hosting means you no longer get Supabase's
 # automatic backups, so this (plus copying backups off this machine) is
 # what replaces that. Run this daily via cron.
 #
@@ -21,9 +21,9 @@ mkdir -p "$BACKUP_DIR"
 
 pg_dump -h 127.0.0.1 -U "$DB_USER" "$DB_NAME" | gzip > "$BACKUP_DIR/db-$STAMP.sql.gz"
 
-if [[ -d "$APP_DIR/static/uploads" || -d "$APP_DIR/static/branding" ]]; then
+if [[ -d "$APP_DIR/static/uploads" || -d "$APP_DIR/static/branding" || -d "$APP_DIR/static/documents" ]]; then
     tar -czf "$BACKUP_DIR/uploads-$STAMP.tar.gz" -C "$APP_DIR/static" \
-        $(cd "$APP_DIR/static" && ls -d uploads branding 2>/dev/null)
+        $(cd "$APP_DIR/static" && ls -d uploads branding documents 2>/dev/null)
 fi
 
 find "$BACKUP_DIR" -type f -mtime +"$KEEP_DAYS" -delete

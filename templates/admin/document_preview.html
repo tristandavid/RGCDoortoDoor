@@ -6,7 +6,10 @@
 
 <div class="admin-card">
   <div class="admin-actions" style="margin-bottom:16px;">
-    <a href="{{ document.download_url }}" class="btn btn-primary" download="{{ document.original_filename }}">Download</a>
+    {% if onlyoffice_enabled and document.onlyoffice_document_type %}
+      <a href="{{ url_for('admin_document_edit_online', document_id=document.id) }}" class="btn btn-primary">Edit Online</a>
+    {% endif %}
+    <a href="{{ document.download_url }}" class="btn {{ 'btn-outline' if onlyoffice_enabled and document.onlyoffice_document_type else 'btn-primary' }}" style="{{ 'color:var(--primary); border-color:var(--primary);' if onlyoffice_enabled and document.onlyoffice_document_type else '' }}" download="{{ document.original_filename }}">Download</a>
     <a href="{{ url_for('admin_documents') }}" class="btn btn-outline" style="color:var(--primary); border-color:var(--primary);">Back to Documents</a>
   </div>
 

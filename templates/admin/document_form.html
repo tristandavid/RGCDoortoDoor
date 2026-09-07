@@ -31,11 +31,21 @@
         </p>
       {% endif %}
       <input type="file" id="file" name="file" accept=".pdf,.doc,.docx,.xls,.xlsx" {{ '' if document else 'required' }}>
-      <p style="color:var(--text-muted); font-size:0.8rem; margin:6px 0 0;">
-        Documents aren't edited in the browser — to change what's inside a
-        file, edit it in Word/Excel on your computer, then upload the new
-        version here. It replaces the old one under the same title.
-      </p>
+      {% if document and onlyoffice_enabled and document.onlyoffice_document_type %}
+        <p style="color:var(--text-muted); font-size:0.8rem; margin:6px 0 0;">
+          To change what's inside this file, use
+          <a href="{{ url_for('admin_document_edit_online', document_id=document.id) }}">Edit Online</a>
+          instead — or upload a replacement below if you've already edited
+          a copy on your computer.
+        </p>
+      {% else %}
+        <p style="color:var(--text-muted); font-size:0.8rem; margin:6px 0 0;">
+          Documents aren't edited in the browser here — to change what's
+          inside a file, edit it in Word/Excel on your computer, then upload
+          the new version here. It replaces the old one under the same
+          title.
+        </p>
+      {% endif %}
     </div>
     <div>
       <button type="submit" class="btn btn-primary">{{ 'Save Changes' if document else 'Upload Document' }}</button>

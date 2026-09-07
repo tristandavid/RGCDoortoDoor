@@ -20,6 +20,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from email.message import EmailMessage
 from functools import wraps
 
+import jwt
 import pyotp
 import qrcode
 import google.auth
@@ -268,6 +269,33 @@ GOOGLE_OAUTH_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 def google_signin_enabled():
     return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+
+
+# --- OnlyOffice Document Server (optional): real in-browser Word/Excel -----
+# editing for Admin > Documents -------------------------------------------
+# Off by default -- the "Edit Online" button only appears once BOTH of
+# these are set. This does NOT run inside this Flask process: it's a
+# separate, self-hosted OnlyOffice Document Server (open source, AGPLv3;
+# see deploy/onlyoffice.md for how to stand one up with Docker and wire it
+# into this app end to end).
+#
+# ONLYOFFICE_URL is the document server's own public base URL (e.g.
+# "https://office.rgcdoortodoorboxservices.ca") -- the admin's BROWSER loads
+# its editor JS from here directly, and this app also fetches the JWT-
+# verified callback from it (see admin_document_onlyoffice_callback below).
+#
+# ONLYOFFICE_JWT_SECRET is a long random string configured identically on
+# BOTH sides: as this app's env var here, and as the document server's own
+# JWT_SECRET. It's what proves a given editor-load request and callback
+# actually came from that document server and not from some other visitor
+# who noticed /admin/documents/<id>/onlyoffice-callback and started posting
+# to it directly -- see _onlyoffice_verify_callback.
+ONLYOFFICE_URL = os.environ.get("ONLYOFFICE_URL", "").rstrip("/")
+ONLYOFFICE_JWT_SECRET = os.environ.get("ONLYOFFICE_JWT_SECRET", "")
+
+
+def onlyoffice_enabled():
+    return bool(ONLYOFFICE_URL and ONLYOFFICE_JWT_SECRET)
 
 
 db = SQLAlchemy(app)
@@ -1078,7 +1106,8 @@ ADMIN_SECTIONS = [
      {"admin_products", "admin_product_new", "admin_product_edit"}),
     ("📄", "Pages", "admin_pages", {"admin_pages", "admin_page_edit"}),
     ("📁", "Documents", "admin_documents",
-     {"admin_documents", "admin_document_new", "admin_document_edit", "admin_document_preview"}),
+     {"admin_documents", "admin_document_new", "admin_document_edit", "admin_document_preview",
+      "admin_document_edit_online"}),
     ("⚙️", "Settings", "admin_settings",
      {"admin_settings", "admin_settings_mfa_setup"}),
 ]
@@ -1134,6 +1163,7 @@ def inject_globals():
         "admin_section": admin_section,
         "current_customer": current_customer,
         "google_signin_enabled": google_signin_enabled(),
+        "onlyoffice_enabled": onlyoffice_enabled(),
     }
 
 
@@ -1533,6 +1563,13 @@ class Document(db.Model):
     original_filename = db.Column(db.String(300), nullable=False)
     file_size = db.Column(db.Integer, nullable=True)
     uploaded_by = db.Column(db.String(50), nullable=True)
+    # Bumped every time the file on disk changes (a manual replace via
+    # admin_document_edit, or a save from the OnlyOffice online editor via
+    # admin_document_onlyoffice_callback). OnlyOffice's editor caches a
+    # document by its "key" -- see admin_document_edit_online -- so the key
+    # has to change whenever the content does, or a stale cached copy gets
+    # reopened instead of the latest file.
+    edit_version = db.Column(db.Integer, nullable=False, default=1)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
@@ -1541,6 +1578,17 @@ class Document(db.Model):
     @property
     def extension(self):
         return self.filename.rsplit(".", 1)[1].lower() if "." in self.filename else ""
+
+    @property
+    def onlyoffice_document_type(self):
+        """'word'/'cell' for OnlyOffice's documentType config field, or None
+        if this file type isn't one OnlyOffice can open -- see
+        admin_document_edit_online."""
+        if self.extension in ("doc", "docx"):
+            return "word"
+        if self.extension in ("xls", "xlsx"):
+            return "cell"
+        return None
 
     @property
     def download_url(self):
@@ -3730,6 +3778,7 @@ def admin_document_edit(document_id):
             document.original_filename = uploaded.filename
             file_path = os.path.join(app.static_folder, new_filename)
             document.file_size = os.path.getsize(file_path) if os.path.isfile(file_path) else None
+            document.edit_version = (document.edit_version or 1) + 1
             delete_uploaded_image(old_filename)
         document.title = title
         document.category = category
@@ -3756,6 +3805,134 @@ def admin_document_delete(document_id):
 def admin_document_preview(document_id):
     document = Document.query.get_or_404(document_id)
     return render_template("admin/document_preview.html", document=document)
+
+
+def _onlyoffice_jwt_encode(payload):
+    return jwt.encode(payload, ONLYOFFICE_JWT_SECRET, algorithm="HS256")
+
+
+def _onlyoffice_verify_callback(body):
+    """Checks the JWT the OnlyOffice Document Server signs its callback
+    requests with, proving a POST to admin_document_onlyoffice_callback
+    actually came from our configured document server (which is the only
+    other party that knows ONLYOFFICE_JWT_SECRET) and not from a stranger
+    who found the URL. Recent Document Server versions send it as
+    "Authorization: Bearer <token>"; some configurations instead (or also)
+    put a "token" field inside the JSON body -- this accepts either. We only
+    need the signature to check out, not to inspect particular claims: only
+    the document server holds the secret, so a validly-signed token is
+    proof enough of where the request came from."""
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else body.get("token")
+    if not token:
+        return False
+    try:
+        jwt.decode(token, ONLYOFFICE_JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
+        return True
+    except jwt.InvalidTokenError:
+        return False
+
+
+@app.route("/admin/documents/<int:document_id>/edit-online")
+@login_required
+def admin_document_edit_online(document_id):
+    """Opens the document in OnlyOffice Document Server's real WYSIWYG
+    editor, embedded in an iframe-like widget via their api.js. See the
+    ONLYOFFICE_URL/ONLYOFFICE_JWT_SECRET comment above and
+    deploy/onlyoffice.md for what has to be running for this to work.
+
+    The config below is OnlyOffice's documented editor config shape: it
+    tells the document server which file to open (a URL back into THIS
+    app's own /static/documents/..., which the document server fetches
+    itself), which webhook to call when the admin saves
+    (admin_document_onlyoffice_callback), and a "key" that must change
+    whenever the file's content changes (see Document.edit_version) so a
+    stale cached copy never gets reopened. The whole config is signed with
+    ONLYOFFICE_JWT_SECRET as the "token" field -- the document server
+    refuses to load a config it can't verify was built by us."""
+    document = Document.query.get_or_404(document_id)
+    if not onlyoffice_enabled():
+        flash("Online editing isn't set up yet — see deploy/onlyoffice.md.", "error")
+        return redirect(url_for("admin_document_preview", document_id=document.id))
+    doc_type = document.onlyoffice_document_type
+    if not doc_type:
+        flash("Online editing is only available for Word and Excel files.", "error")
+        return redirect(url_for("admin_document_preview", document_id=document.id))
+    identity = session.get("admin_identity", "owner")
+    config = {
+        "document": {
+            "fileType": document.extension,
+            "key": f"doc{document.id}v{document.edit_version}",
+            "title": document.original_filename,
+            "url": url_for("static", filename=document.filename, _external=True),
+            "permissions": {"edit": True, "download": True, "print": True},
+        },
+        "documentType": doc_type,
+        "editorConfig": {
+            "callbackUrl": url_for(
+                "admin_document_onlyoffice_callback", document_id=document.id, _external=True,
+            ),
+            "lang": "en",
+            "user": {"id": identity, "name": _admin_display_username(identity)},
+            # forcesave: lets the editor's own Save button push a save
+            # immediately, rather than only saving once the admin closes the
+            # tab -- closer to how Word/Excel's own Save button behaves.
+            "customization": {"forcesave": True},
+        },
+        "width": "100%",
+        "height": "100%",
+    }
+    config["token"] = _onlyoffice_jwt_encode(config)
+    return render_template(
+        "admin/document_edit_online.html", document=document,
+        onlyoffice_url=ONLYOFFICE_URL, config=config,
+    )
+
+
+@app.route("/admin/documents/<int:document_id>/onlyoffice-callback", methods=["POST"])
+def admin_document_onlyoffice_callback(document_id):
+    """Webhook the OnlyOffice Document Server calls on its own (not a
+    logged-in admin's browser) whenever there's something to save -- see
+    admin_document_edit_online. Deliberately NOT behind @login_required;
+    _onlyoffice_verify_callback is what stands in for auth here. Per
+    OnlyOffice's API contract this must always respond {"error": 0} unless
+    something on OUR end failed to save, or the document server will show
+    the admin a save-error in the editor."""
+    if not onlyoffice_enabled():
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    if not _onlyoffice_verify_callback(body):
+        return jsonify({"error": 1}), 403
+    document = Document.query.get(document_id)
+    if not document:
+        return jsonify({"error": 1}), 404
+    status = body.get("status")
+    # Status codes per OnlyOffice's docs: 1 = being edited, 2 = ready for
+    # saving (editor closed after changes), 3 = save error on their end,
+    # 4 = closed with no changes, 6 = force-saved (still open, e.g. the
+    # editor's own Save button via "forcesave" above), 7 = force-save error.
+    # Only 2 and 6 mean "here's a new version of the file, please store it."
+    if status in (2, 6):
+        file_url = body.get("url")
+        if not file_url:
+            return jsonify({"error": 1})
+        try:
+            with urllib.request.urlopen(file_url, timeout=30) as resp:
+                new_bytes = resp.read()
+        except (urllib.error.URLError, ValueError, OSError):
+            return jsonify({"error": 1})
+        file_path = os.path.join(app.static_folder, document.filename)
+        try:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "wb") as f:
+                f.write(new_bytes)
+        except OSError:
+            return jsonify({"error": 1})
+        document.file_size = len(new_bytes)
+        document.edit_version = (document.edit_version or 1) + 1
+        document.updated_at = datetime.utcnow()
+        db.session.commit()
+    return jsonify({"error": 0})
 
 
 @app.route("/admin/products")
